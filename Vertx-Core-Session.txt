@@ -447,11 +447,308 @@ Vertx uses per cpu core - 2 event loop, lets say i have 12 cores - 12 *2 =24 eve
 ....................................................................................
 	
 	Lets enter into vertx app; how to build non blocking and async apps:
-......................................................................................
+.....................................................................................
+
+vertx Programming pattern:
+  Functional style
+
+Project setup:
+..............
+-Vertx Project setup
+   -Maven Project
+   -Gradle Project
+
+1.plain maven project, add vertx depedencies,You can use template entry method provided by vertx .
+
+2.Vertx Starter project
+
+3.Vertx maven cli project
 
 
+.................................................................................
+			 How to create vertx cli project..
+
+https://start.vertx.io/
+
+Vertx application can be small to big enterprise microservice application.
+
+Like spring , starts with spring-core , after that ,spring-mvc,spring-data....(modules)
+
+Vertx also begins modules
+
+vertx-core ,vertx-web,vertx-data..............etc...
+
+vertx-core:
+
+How to run vertx app?
+
+Every Vertx apps will have entry point, configured in pom.xml
+
+ <main.verticle>com.amex.MainVerticle</main.verticle>
+ <launcher.class>io.vertx.core.Launcher</launcher.class>
+
+How to run vertx apps?
+
+1.compile the code and execute - dev mode.
+
+mvnw clean compile exec:java
+
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------------< com.amex:vertxcoreapp >------------------------
+[INFO] Building vertxcoreapp 1.0.0-SNAPSHOT
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- maven-clean-plugin:2.5:clean (default-clean) @ vertxcoreapp ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ vertxcoreapp ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory E:\session\AMex\2023\vertxcoreapp\src\main\resources
+[INFO]                                                                                         
+[INFO] --- maven-compiler-plugin:3.8.1:compile (default-compile) @ vertxcoreapp ---            
+[INFO] Changes detected - recompiling the module!
+[INFO] Compiling 1 source file to E:\session\AMex\2023\vertxcoreapp\target\classes
+[INFO] 
+[INFO] --- exec-maven-plugin:3.0.0:java (default-cli) @ vertxcoreapp ---
+HTTP server started on port 8888
+Oct 16, 2023 2:22:56 PM io.vertx.core.impl.launcher.commands.VertxIsolatedDeployer
+INFO: Succeeded in deploying verticle
+
+By default vertx offers some Webservice which is running in port 8888
+
+http://localhost:8888/
+
+2.Creating production apps -deployment 
+
+mvnw clean package 
+
+ This command gives two jars.
+  
+ Regular jar   - jar which has separate dependency - application has one jar , libs                  has another jar
+ fat jar -  everything in one jar
+
+How to run ?
+
+java -jar target/vertxcoreapp-1.0.0-SNAPSHOT-fat.jar
+.....................................................................................
+Vert.x Learning Path:
+.....................
+1.Vert.x core
+2.Vert.x Web apps - RESTFull API
+3.Vert.x Reactive Programming - Using Rxjava or SmallRye Mutiny
+4.Vert.x Database Programming
+5.Microservices features and implementation
 
 
+.....................................................................................
+				Vert.x Core
+.....................................................................................
+			   vertx Core concepts
+.....................................................................................
+
+Core Vertx Concepts:
+....................
+
+1.Vertx Instance , so Called "Vertx Engine". === Spring Container
+2.Verticles ; so called an Object through which you can create apps.
+
+Vertx Engine is a java class, represented as interface in the io.vertx.core package
+
+io.vertx.core package is core package
+
+Vertx Instance:
+
+ It is Object,Container Object. like Spring Container.
+
+-it is entry and exit point of vertx application.
+-on jvm(single) process can have single vertx instance.
+-vertx can host other objects.
+
+To create an instance of this class you can use the static factory methods:
+
+ vertx(), 
+ vertx(io.vertx.core.VertxOptions) 
+ clusteredVertx(io.vertx.core.VertxOptions, Handler)
+
+Vertx Instance can do 
+
+Creating TCP clients and servers
+Creating HTTP clients and servers
+Creating DNS clients
+Creating Datagram sockets
+Setting and cancelling periodic and one-shot timers
+Getting a reference to the event bus API
+Getting a reference to the file system API
+Getting a reference to the shared data API
+Deploying and undeploying verticles
+
+.....................................................................................
+			   vertx Core concepts
+.....................................................................................
+
+Core Vertx Concepts:
+....................
+
+1.Vertx Instance , so Called "Vertx Engine". === Spring Container
+2.Verticles ; so called an Object through which you can create apps.
+
+Vertx Engine is a java class, represented as interface in the io.vertx.core package
+
+io.vertx.core package is core package
+
+Vertx Instance:
+
+ It is Object,Container Object. like Spring Container.
+
+-it is entry and exit point of vertx application.
+-on jvm(single) process can have single vertx instance.
+-vertx can host other objects.
+
+To create an instance of this class you can use the static factory methods:
+
+ vertx(), 
+ vertx(io.vertx.core.VertxOptions) 
+ clusteredVertx(io.vertx.core.VertxOptions, Handler)
+
+Vertx Instance can do 
+
+Creating TCP clients and servers
+Creating HTTP clients and servers
+Creating DNS clients
+Creating Datagram sockets
+Setting and cancelling periodic and one-shot timers
+Getting a reference to the event bus API
+Getting a reference to the file system API
+Getting a reference to the shared data API
+Deploying and undeploying verticles
+
+
+In order to write vertx app, we have two styles
+
+1.Verticle based
+2.With out Verticle
+
+Verticle based is mostly recommened incase if you write independant vertx apps
+Without Verticle itself you can write vertx app, it is mostly usefull if you embed vertx feature into some other apps like spring.
+
+Demo: without Verticle:
+.......................
+package com.amex.withoutverticle;
+
+import io.vertx.core.Vertx;
+
+public class HelloVertx {
+  public static void main(String[] args) {
+    //vertx engine ready
+    Vertx vertx = Vertx.vertx();
+    System.out.println(vertx.getClass().getName());
+    //write simple web server
+    vertx.createHttpServer().requestHandler(req->{
+       req.response().end("Hello Vertx");
+    }).listen(8080);
+  }
+}
+
+.....................................................................................
+
+Vertx modules:
+...............
+vertx-core
+vertx-web
+vertx-data
+vertx-microservices
+etc...
+
+Verticles
+Threading modles
+callbacks
+Promises
+Futures
+
+Verticle:
+  -It is java object
+  -It can be deployed and undeployed on vertx instance(Engine).
+
+What is deployment?
+
+The action of bringing "resources" into effective action
+
+In vertx, Brining Resources ready  for computation.
+
+Resources:
+ -Thread creation /allocation
+ -binding an object with that thread
+ -Register all event handlers in case of event driven programming
+ -Allocate memory if required for data/other 
+ -Ensures that other depenendant resources are ready.
+
+-It is based on design pattern called "Actor-like Model"
+-Verticles are bound to "Event loop" , are processed by event loop threads.
+
+Verticle is interface which provides life cycle methods 
+  -init   - called when verticle being initalized
+  -start - called when verticle during deployment
+  -stop  - called when verticles during undeployment
+
+
+if you are writing any verticle class, you cant use "Verticle" Interface directly.
+
+Vertx provides an implementation abstract class called "AbstractVerticle" class.
+
+
+io.vertx.core.AbstractVerticle
+
+Reactive Implementation based:
+io.vertx.rxjava3.core.AbstractVerticle
+io.vertx.rxjava.core.AbstractVerticle
+io.vertx.reactivex.core.AbstractVerticle
+
+
+How to use Verticle?
+
+ AbstractVerticle is base class for creating our own verticles.
+
+
+eg:
+ if you are going to implement servlet , 
+
+public class MyServlet extends HttpServlet{
+
+  init  
+  doGet
+  doPost
+  destroy
+}
+
+package com.mycom;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Context;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+
+public class HelloWorldVerticle extends AbstractVerticle {
+  //override life cycle method
+  @Override
+  public void init(Vertx vertx, Context context) {
+    super.init(vertx, context);
+    System.out.println("Init is called");
+  }
+
+  //whenever we deploy the verticle on vertx engine these methods are called auotmatically
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    super.start(startPromise);
+    System.out.println("Start is called");
+  }
+
+  @Override
+  public void stop() throws Exception {
+    super.stop();
+    System.out.println("Stop is called");
+  }
+}
+....................................................................................
 
 
 
