@@ -832,6 +832,356 @@ public class LanucherDeployer extends AbstractVerticle {
   }
 }
 .....................................................................................
+				Vertx Coding Style
+.....................................................................................
+
+Patterns to write non blocking apps
+
+1.callback style -traditional way
+2.Reactive style -Streaming pattern
+
+In order to write non blocking apps,
+  the os should support non blocking infrastructure - epoll,kqueue,iocp.
+  The pl and frameworks should give apis to leverlage non blocking
+
+
+Non blocking apis provided vertx.
+1.timer - vertx.setPeriodic
+2.http -vertx.createHttpServer()
+3.fs
+4.socket
+5.database
+etc.......
+
+
+
+Reactive and nonblocking :
+
+non-blocking
+  how to use min no threads, using event driven model for io
+
+reactive
+   how to write code declarativly to transfer data from one app/ to another app -straming
+   while writing reactive programing you can use "non blocking infrastructure"
+
+ min -threads,declarative,
+
+vertx - non blocking + reactive => fully nonblocking reactive app
+
+Callback/Listener Style:
+1.Future
+2.Promises
+
+
+if you come from java script && node.js background,you know the concept called "Callback function" - callback function is other wise called as "listener function" or "handler function".
+
+Handler Function /Callback function/Listener function:
+.......................................................
+1.Handler functions are not called by developers directly like other functions.
+2.Handlers functions are called by a thread "Event Loop".
+3.Handler functions are available inside Event Queue as passive instruction.
+4.Once async operation(task-database connnection) is completed, os triggers event, along with event, data, and its   handler is pushed into event queue, event loop thread starts processing event by assinging a handler function.
+
+What is handler function/callback function/listener function for?
+
+ "To handle async success /failure result"
+     "The result of async Operation could be either success or failure".
+
+io.vertx.Future:
+
+-it is interface used to handle async success/failure results.
+-vertx uses Future(Object) to represent "Asynchronous" Results
+-Future is like transport object to transport data between caller and callee in async  manner
+
+Caller -------Future-----Callee
+
+
+What type of data Future can carry?
+
+-Success--------|
+                  ---->Future -----Verticle----Thread---bound with event loop--events
+-Failure--------|
+
+AsynResult<T>:
+
+Encapsulates the result of an asynchronous operation.
+
+Object which has either success data or failure data.
+
+If it failed then the cause of the failure is available with cause().
+
+If it succeeded then the actual result is available with result()
+...................................................................................
+
+Future is interface , encapsulate response(Success/failure), we need to create Object 
+for "Future" implementation
+
+Future f = Future.future() // create FutureImpl object
+
+Two major api for response:
+
+
+1.complete()  and complete(T result) =>Success Response, encasulated inside this api
+
+2.fail(String failureMessage) and fail(Throwable cause) =>Failure response, encapsulate  inside this api.
+
+Handler apis for handling response;
+...................................
+
+1.succeeded() : empty response
+2.default Future<T> onComplete(Handler<AsyncResult<T>> handler)
+3.onSuccess
+5.onFailure
+
+
+
+AsyncResult interface apis
+
+ -result() - get the success result sent by Future
+ -cause()   -get the failure result sent by Future
+ -succeed() -test whether it was success or failure
+ -failed()  -test whether it was failure or success
+....................................................................................
+			 Getting Future Usage code
+....................................................................................
+
+How to create Future Object and returns response?
+
+Caller
+   who calls api
+Callee
+   who provides api which returns "Future" with either success or failure.
+
+Future may return data or may not: Empty Future:
+package com.amex.futures;
+
+import io.vertx.core.*;
+
+public class FutureDemoVertcle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", FutureDemoVertcle.class.getName());
+  }
+
+  //empty Future
+  public Future<Void> getEmptyFuture(){
+      //Create FutureObject using Anoymous innerclass pattern
+//   return   Future.future(new Handler<Promise<Void>>() {
+//       @Override
+//       public void handle(Promise<Void> event) {
+//            event.complete();
+//       }
+//     });
+    //Create Future Object using lambda pattern: it is highly recommend
+    return   Future.future(event->{
+        event.complete(); //complete method is empty meaning that no data is returned
+    });
+  }
+
+  @Override
+  public void start() throws Exception {
+    super.start();
+    //callee :anonymous inner class
+//    getEmptyFuture().onComplete(new Handler<AsyncResult<Void>>() {
+//      @Override
+//      public void handle(AsyncResult<Void> asyncResult) {
+//          if(asyncResult.succeeded()){
+//            System.out.println("Empty Future returned");
+//            asyncResult.result();
+//          }
+//      }
+//    });
+    getEmptyFuture().onComplete(asyncResult -> {
+      if(asyncResult.succeeded()){
+        System.out.println("Empty Future is returned");
+      }
+    });
+
+  }
+
+  @Override
+  public void stop() throws Exception {
+    super.stop();
+  }
+}
+.....................................................................................
+
+Future with Data,Error,Both
+............................
+package com.amex.futures;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+
+
+public class FutureWithDataVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", FutureWithDataVerticle.class.getName());
+  }
+
+  //Data can be anything: string,numbers,objects, Json
+  public Future<String> getHelloMessage(){
+      return  Future.future(future->{
+          future.complete("Hello Future");
+      });
+  }
+  //How to return error
+  public Future<String> getError(){
+    return  Future.future(future->{
+        future.fail("Something went wrong");
+    });
+  }
+
+  //biz logic with error or success
+
+  public Future<String> login(String userName,String password){
+       if(userName.equals("admin") && password.equals("admin")){
+            return  Future.future(future->{
+                 future.complete("Login Success");
+            });
+       }
+       return  Future.future(future->{
+           future.fail("Login is failed");
+       });
+  }
+
+
+  @Override
+  public void start() throws Exception {
+    super.start();
+    //scuccess
+   getHelloMessage().onComplete(event->{
+      if(event.succeeded()){
+        System.out.println(event.result());
+      }else{
+        System.out.println(event.cause().getMessage());
+      }
+   });
+   //error
+    getError().onComplete(event->{
+       if(event.failed()){
+         System.out.println(event.cause());
+       }
+    });
+    //login with success
+    login("admin","admin").onComplete(event->{
+        if(event.succeeded()){
+          System.out.println(event.result());
+        }else {
+          System.out.println(event.cause());
+        }
+    });
+
+    login("foo","bar").onComplete(event->{
+      if(event.succeeded()){
+        System.out.println(event.result());
+      }else {
+        System.out.println(event.cause());
+      }
+    });
+
+
+  }
+
+  @Override
+  public void stop() throws Exception {
+    super.stop();
+  }
+}
+....................................................................................
+Shortcuts for Listener Code;
+.............................
+
+Listener api Which returns Future.
+
+Syntax:
+someApi().onComplete(Handler<AsynResult>)
+someApi().onSuccess(res->{});
+someApi().onError(err->{});
+someApi().onSuccess(res->{}).onError(err->{});
+someApi().onSuccess(System.out::println).onError(System.out::println);
+
+package com.amex.futures;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+
+public class FutureListenerSyntaxVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run",FutureListenerSyntaxVerticle.class.getName());
+  }
+
+  public Future<String> getMessage(){
+    return  Future.future(future->{
+         future.complete("Hello");
+    });
+  }
+  public Future<String> getError(){
+    return  Future.future(future->{
+      future.fail("");
+    });
+  }
+  public Future<String> login(String userName,String password){
+    if(userName.equals("admin") && password.equals("admin")){
+      return  Future.future(future->{
+        future.complete("Login Success");
+      });
+    }
+    return  Future.future(future->{
+      future.fail("Login is failed");
+    });
+  }
+  @Override
+  public void start() throws Exception {
+    super.start();
+    getMessage().onComplete(event->{
+         if(event.succeeded()){
+           System.out.println(event.result());
+         }
+    });
+    //shortcut with lambda
+    getMessage().onSuccess(res->{
+      System.out.println(res);
+    });
+    //shortcut with methodReference
+    getMessage().onSuccess(System.out::println);
+
+    //errro
+    getError().onFailure(err->{
+      System.out.println(err);
+    });
+    getError().onFailure(System.err::println);
+
+    //both success and failure
+    login("admin","admin").onComplete(event->{
+      if(event.succeeded()){
+        System.out.println(event.result());
+      }else {
+        System.out.println(event.cause());
+      }
+    });
+    login("admin","admin")
+      .onSuccess(System.out::println)
+      .onFailure(System.err::println);
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
