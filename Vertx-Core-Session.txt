@@ -1537,22 +1537,201 @@ Callback Chaining:
    ->using lambdba 
    ->using method reference
 .....................................................................................
+			Future Coordination
+....................................................................................
+Coordination of multiple futures can be achived with "Vert.x" Futures.It supoorts concurrent composition (run several async operations in parale) and sequentional composition(chain asyn operations)
+
+Lets i have i have three methods
+
+1.startDbServer
+2.startHttpServer
+3.startConfigServer
+
+I need to ensure that my app must initalized only, all servers are up, if any one server is failed, stop all servers , dont initalize my app.
 
 
+Future Coordintation:
+
+   Coordination of multiple futures can be achived with Vertx Futures
+
+Vertx supports cocurrent compostion(running serveral async operations in parall) and code looks sequentail - chaining async operations.
+
+package com.amex.futures;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+
+public class CompositFutureVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", CompositFutureVerticle.class.getName());
+  }
+
+  public Future<String> startDbServer() {
+    System.out.println("DB Server started");
+    return Future.succeededFuture("Db Server is Up");
+  }
+
+  public Future<String> startHttpServer() {
+    System.out.println("HTTP server started");
+    return Future.succeededFuture("HttpServer is Up");
+  }
+
+  public Future<String> startConfigServer() {
+    System.out.println("Config Server started");
+    return Future.succeededFuture("Config Server is Up");
+  }
+
+  @Override
+  public void start() throws Exception {
+    super.start();
+    Future<String> dbServer = startDbServer();
+    Future<String> webServer = startHttpServer();
+    Future<String> configServer = startConfigServer();
+    Future.all(dbServer, configServer, webServer).onComplete(ar -> {
+      if (ar.succeeded()) {
+        System.out.println("All servers  up");
+        //do something if all servers are up
+      } else {
+        System.out.println(ar.cause().getMessage());
+      }
+    });
+
+    Future.all(dbServer, configServer, webServer).onSuccess(System.out::println).onFailure(System.out::println);
+  }
+}
+....................................................................................
+			Promises
+...................................................................................
+
+If Futures are read side of async result where as Promises are "write side" of async results.
+
+Promises are insired from java script language.
+
+Promises are semantically meaningfull abstrcation for handling async result.
+
+Most of the developers confuse the Java Future and Vert.x Future, in order to avoid confusion, Promises were introduced.
+
+Promises cant be processed directly with "OnComplete/OnSuccess" api 
+
+Promises need to converted into Future before Processing.
+
+package com.amex.promises;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+
+public class PromiseVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", PromiseVerticle.class.getName());
+  }
+
+  public Promise<String> getHelloPromise() {
+    Promise promise = Promise.promise();
+    promise.complete("Hello Promise");
+    return promise;
+  }
+
+  public Future<String> getHaiPromise() {
+    Promise promise = Promise.promise();
+    promise.complete("Hai Promise");
+    return promise.future();
+  }
+
+  @Override
+  public void start() throws Exception {
+    super.start();
+    getHelloPromise().future().onComplete(ar -> {
+      if (ar.succeeded()) {
+        System.out.println(ar.result());
+      }
+    });
+    getHelloPromise().future().onSuccess(System.out::println);
+
+    getHaiPromise().onSuccess(System.out::println);
+  }
+}
+.....................................................................................
+		  Asynchronous Verticle Start and Stop
+.....................................................................................
+
+Sometimes you want to do something in your verticle start up which takes some time and you dont want the verticle to be considerd deployed until that happens.
+For eg you might want to start an HTTP server in the method and propagate the async result of the server listen method.
+
+You cant block waiting for the HTTP server to bind in your start method as that would break the non blocking rule.
+
+so how can you do this?
+
+The way to do it is to implement the async start method.
+This version of the method takes a Future(Promise) as a Parameter.When the method returns the verticle will not be considered deployed.
+
+package com.amex.promises;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.http.HttpServer;
+
+public class PromiseStartVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", PromiseStartVerticle.class.getName());
+  }
+
+  private HttpServer httpServer;
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+  //  super.start(startPromise);
+    httpServer = vertx.createHttpServer().requestHandler(req -> {
+      req.response().end("Hello");
+    });
+    //listener
+    httpServer.listen(8080, (res) -> {
+      if (res.succeeded()) {
+        //once this code reaches this verticle considered deployed
+        startPromise.complete();
+        //startPromise.fail("est");
+      } else {
+        startPromise.fail(res.cause());
+      }
+    });
+
+  }
+}
+.....................................................................................
+			Data Format in vertx
+.....................................................................................
+1.Buffer
+2.JSON object
+
+Buffer:
+  Most data is shuffled around inside vertx using buffers.
+
+ A buffer is a sequence of zero or more bytes that can read from or written to and which expands automatically as necessary to accommodate any bytes written to it.
+You can perhaps think of a buffer as smart byte array.
 
 
+1.Verticles running in vertx often need to process blocks of data.
+2.For instance , data from an incomming http request, data loaded from the disk or data generated as response to http request etc.
+3.A Buffer in vertx can hold binary data.
+4.Buffer is similar to byte array, except the buffer can expand its capacity dynamically  as you write data to it.
 
+How to create buffer?
 
+Empty Buffer
+Buffer buffer= Buffer.buffer()
 
+Buffer from string:
 
+Buffer buffer =Buffer.buffer("some buffer")
 
+Buffer buffer =Buffer.buffer("some buffer","UTF-8")
 
-
-
-
-
-
-
+Buffer from byte Array:
+byte[] bytes= new Byte[] {3,6,30};
+Buffer buffer=Buffer.buffer(bytes)
 
 
 
