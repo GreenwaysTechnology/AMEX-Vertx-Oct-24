@@ -1166,6 +1166,380 @@ public class FutureListenerSyntaxVerticle extends AbstractVerticle {
       .onFailure(System.err::println);
   }
 }
+.....................................................................................
+			 Callback Chaining
+.....................................................................................
+
+In Sequential Programming/sync Programming, the flow of the program like below
+
+
+//jdbc workflow
+Connection con = DriverManger.getConnection();
+Statement st = con.createStatement();
+ResultSet rows =st.executeQuery("select * from orders")
+while(rows.next()){
+  System.out.println(rows.getInt(0)));
+}
+Here flow will go one after another.
+
+What if the same task can be done in functional programming or async way:Vertx.
+
+Functional way of writing sequential work flow.
+   Nested Callbacks/callback chaining/functional Style.
+
+
+Handler function is called as callback function.
+
+"The output of one callback is input to the another callback , nested callback.
+
+cb1
+   ---cb2
+       |
+        ------
+       cb3
+	|
+	|	
+	---------
+	|
+	|
+	cb4 
+	 |
+	 |
+	 --------
+	  |
+	  cbN
+	    |
+	    process the result.
+
+Use Case:
+ getUser
+ login
+ showDashard
+
+ if getUser success
+        |
+	login- success
+          |
+	  showDashboard
+
+ if getUser failed
+        |
+	login-  failed
+          |
+	  showDashboard -failed
+
+ catch -
+....................................................................................
+
+Creating Future Object and Return:
+
+Ways :
+1.Future.future(fu->{})
+  public Future<String> login(String userName,String password){
+       if(userName.equals("admin") && password.equals("admin")){
+            return  Future.future(future->{
+                 future.complete("Login Success");
+            });
+       }
+       return  Future.future(future->{
+           future.fail("Login is failed");
+       });
+  }
+2.Future
+  Future.succeededFuture | failedFuture
+
+  public Future<User> getUser(){
+      User user = new User("admin","admin");
+      if(user!=null){
+        return  Future.succeededFuture(user);
+      }else{
+        return Future.failedFuture("User Not Found");
+      }
+  }
+
+Callback Chaining:
+.................
+package com.amex.futures;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+
+public class CallbackVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", CallbackVerticle.class.getName());
+  }
+
+  //getUser
+  public Future<User> getUser() {
+    System.out.println("Get User is called");
+    User user = new User("admin", "admin");
+    //user = null; Testing for failures
+    if (user != null) {
+      return Future.succeededFuture(user);
+    } else {
+      return Future.failedFuture("User Not Found");
+    }
+  }
+
+  public Future<String> login(User user) {
+    System.out.println("Login is called");
+    if (user.getUserName().equals("admin") && user.getPassword().equals("admin")) {
+      return Future.succeededFuture("Login is success");
+    } else {
+      return Future.failedFuture("Login is failed");
+    }
+  }
+
+  public Future<String> showDashboard(String status) {
+    System.out.println("ShowDashboard is called");
+    if (status.equals("Login is success")) {
+      return Future.succeededFuture("Welcome to Dashboard");
+    } else {
+      return Future.failedFuture("Sorry Try Again!");
+    }
+  }
+
+  @Override
+  public void start() throws Exception {
+    super.start();
+    getUser().onComplete(userHandler -> {
+      if (userHandler.failed()) {
+        System.out.println(userHandler.cause().getMessage());
+      } else {
+        User user = userHandler.result();
+        login(user).onComplete(loginHandler -> {
+          if (loginHandler.failed()) {
+            System.out.println(loginHandler.cause().getMessage());
+          } else {
+            showDashboard(loginHandler.result()).onComplete(dashboardHandler -> {
+              if (dashboardHandler.failed()) {
+                System.out.println(dashboardHandler.cause().getMessage());
+              } else {
+                System.out.println(dashboardHandler.result());
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
+  @Override
+  public void stop() throws Exception {
+    super.stop();
+  }
+}
+.....................................................................................
+....................................................................................
+			 Calback Hell
+............................................................................
+
+    getUser().onComplete(userHandler -> {
+      if (userHandler.failed()) {
+        System.out.println(userHandler.cause().getMessage());
+      } else {
+        User user = userHandler.result();
+        // System.out.println(user.getUserName() + " " + user.getPassword());
+        //call login
+        login(user.getUserName(), user.getPassword()).onComplete(loginHandler -> {
+          if (loginHandler.failed()) {
+            System.out.println(loginHandler.cause().getMessage());
+          } else {
+            //System.out.println(loginHandler.result());
+            showDashboard(loginHandler.result()).onComplete(dashboardHandler -> {
+              if (dashboardHandler.failed()) {
+                System.out.println(dashboardHandler.cause());
+              } else {
+                System.out.println(dashboardHandler.result());
+              }
+            });
+          }
+        });
+      }
+    });
+
+
+Look at the above code, ask your self
+
+1.is it easy to understand
+2.is it easy to scale
+3.is it easy to maintain.
+
+No!
+This is called callback hell, the callback hell is way of writing complex callback based programming.
+
+Can we escape from the callback hell problem, or how to write better callback based programming.
+
+Yes!
+
+Solutions For Callback Hell
+.................................
+
+Solution 1:
+..........
+  private void giveSolutionOne() {
+    //Using onSuccess and OnSuccess
+    getUser()
+      .onSuccess(user -> {
+        login(user).onSuccess(status -> {
+          showDashboard(status).onSuccess(dashboard -> {
+          }).onFailure(dashboardErr -> {
+            System.out.println(dashboardErr.getMessage());
+          });
+        }).onFailure(loginErr -> {
+          System.out.println(loginErr.getMessage());
+        });
+      }).onFailure(err -> {
+        System.out.println(err.getMessage());
+      });
+  }
+
+Solution 2:
+  private void giveSolutionTwo() {
+    getUser()
+      .compose(user -> {
+        return login(user);
+      })
+      .compose(status -> {
+        return showDashboard(status);
+      })
+      .onSuccess(res -> System.out.println(res))
+      .onFailure(err -> System.out.println(err));
+  }
+
+Solution 2.1: code refactoring using functional programming concepts
+if function has no any code only return statement,then we can remove {} and return statement -  lambda refactoring.
+
+  private void giveSolutionTwo() {
+    getUser()
+      .compose(user -> login(user))
+      .compose(status -> showDashboard(status))
+      .onSuccess(res -> System.out.println(res))
+      .onFailure(err -> System.out.println(err));
+  }
+
+Solution 2.2: Using Compose , and using java 8 method reference, instead of lambda syntax, we use Method reference.
+
+  private void giveSolutionTwo() {
+    getUser()
+      .compose(this::login)
+      .compose(this::showDashboard)
+      .onSuccess(System.out::println)
+      .onFailure(System.out::println);
+     }
+
+Demo:
+package com.amex.futures;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+
+public class CallbackHellSolutionVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", CallbackHellSolutionVerticle.class.getName());
+  }
+
+  //getUser
+  public Future<User> getUser() {
+    System.out.println("Get User is called");
+    User user = new User("admin", "admin");
+    //user = null; Testing for failures
+    if (user != null) {
+      return Future.succeededFuture(user);
+    } else {
+      return Future.failedFuture("User Not Found");
+    }
+  }
+
+  public Future<String> login(User user) {
+    System.out.println("Login is called");
+    if (user.getUserName().equals("admin") && user.getPassword().equals("admin")) {
+      return Future.succeededFuture("Login is success");
+    } else {
+      return Future.failedFuture("Login is failed");
+    }
+  }
+
+  private Future<String> showDashboard(String status) {
+    System.out.println("ShowDashboard is called");
+    if (status.equals("Login is success")) {
+      return Future.succeededFuture("Welcome to Dashboard");
+    } else {
+      return Future.failedFuture("Sorry Try Again!");
+    }
+  }
+
+  private void giveSolutionOne() {
+    //Using onSuccess and OnSuccess
+    getUser()
+      .onSuccess(user -> {
+        login(user).onSuccess(status -> {
+          showDashboard(status).onSuccess(dashboard -> {
+          }).onFailure(dashboardErr -> {
+            System.out.println(dashboardErr.getMessage());
+          });
+        }).onFailure(loginErr -> {
+          System.out.println(loginErr.getMessage());
+        });
+      }).onFailure(err -> {
+        System.out.println(err.getMessage());
+      });
+  }
+
+  //  private void giveSolutionTwo() {
+//    getUser()
+//      .compose(user -> {
+//        return login(user);
+//      })
+//      .compose(status -> {
+//        return showDashboard(status);
+//      })
+//      .onSuccess(res -> System.out.println(res))
+//      .onFailure(err -> System.out.println(err));
+//  }
+//  private void giveSolutionTwo() {
+//    getUser()
+//      .compose(user -> login(user))
+//      .compose(status -> showDashboard(status))
+//      .onSuccess(res -> System.out.println(res))
+//      .onFailure(err -> System.out.println(err));
+//  }
+
+  private void giveSolutionTwo() {
+    getUser()
+      .compose(this::login)
+      .compose(this::showDashboard)
+      .onSuccess(System.out::println)
+      .onFailure(System.out::println);
+     }
+
+  @Override
+  public void start() throws Exception {
+    super.start();
+    //giveSolutionOne();
+    giveSolutionTwo();
+  }
+
+  @Override
+  public void stop() throws Exception {
+    super.stop();
+  }
+}
+
+Callback Chaining:
+
+1.using onComplete with handler
+2.using OnSuccess and OnFailure
+3.Using compose method
+   ->using normal compose
+   ->using lambdba 
+   ->using method reference
+.....................................................................................
+
+
+
 
 
 
