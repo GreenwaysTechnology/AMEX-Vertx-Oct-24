@@ -582,46 +582,6 @@ Getting a reference to the file system API
 Getting a reference to the shared data API
 Deploying and undeploying verticles
 
-.....................................................................................
-			   vertx Core concepts
-.....................................................................................
-
-Core Vertx Concepts:
-....................
-
-1.Vertx Instance , so Called "Vertx Engine". === Spring Container
-2.Verticles ; so called an Object through which you can create apps.
-
-Vertx Engine is a java class, represented as interface in the io.vertx.core package
-
-io.vertx.core package is core package
-
-Vertx Instance:
-
- It is Object,Container Object. like Spring Container.
-
--it is entry and exit point of vertx application.
--on jvm(single) process can have single vertx instance.
--vertx can host other objects.
-
-To create an instance of this class you can use the static factory methods:
-
- vertx(), 
- vertx(io.vertx.core.VertxOptions) 
- clusteredVertx(io.vertx.core.VertxOptions, Handler)
-
-Vertx Instance can do 
-
-Creating TCP clients and servers
-Creating HTTP clients and servers
-Creating DNS clients
-Creating Datagram sockets
-Setting and cancelling periodic and one-shot timers
-Getting a reference to the event bus API
-Getting a reference to the file system API
-Getting a reference to the shared data API
-Deploying and undeploying verticles
-
 
 In order to write vertx app, we have two styles
 
@@ -748,11 +708,130 @@ public class HelloWorldVerticle extends AbstractVerticle {
     System.out.println("Stop is called");
   }
 }
+....................................................................................	
+			 Ways to Deploy verticles
 ....................................................................................
 
+Deploying single verticle
+
+1.Via pom.xml
+<main.verticle>com.amex.MainVerticle</main.verticle>
+    <launcher.class>io.vertx.core.Launcher</launcher.class>
+
+mvnw clean compile exec:java
+
+..................................................................................
+
+Deploying many verticles.
+
+1.within Main verticle and deployother Verticles
+2.write simple java class and through which we can deploy
+3.Vertx Provides  a runner/Lanucher class through which also you can deploy.
 
 
+1.within Main verticle and deploy other Verticles
+			
+Main verticle is configured in pom.xml
 
+
+1.Via pom.xml
+<main.verticle>com.amex.MainVerticle</main.verticle>
+<launcher.class>io.vertx.core.Launcher</launcher.class>
+
+mvnw clean compile exec:java
+
+package com.amex;
+
+package com.amex;
+
+import io.vertx.core.AbstractVerticle;
+//import io.vertx.core.Vertx;
+
+public class MainVerticle extends AbstractVerticle {
+  @Override
+  public void start() throws Exception {
+    super.start();
+    System.out.println("Main Vertical started");
+//    Vertx vertx = Vertx.vertx();
+   // vertx.deployVerticle("com.amex.HelloWorldVerticle");
+   // vertx.deployVerticle(HelloWorldVerticle.class.getName());
+      vertx.deployVerticle(new HelloWorldVerticle());
+
+  }
+
+  @Override
+  public void stop() throws Exception {
+    super.stop();
+    System.out.println("Main Vertical stopped");
+
+  }
+}
+
+
+package com.amex;
+
+import io.vertx.core.AbstractVerticle;
+
+public class HelloWorldVerticle extends AbstractVerticle {
+  //called after this verticle deployed on vertx engine
+  @Override
+  public void start() throws Exception {
+    super.start();
+    System.out.println("Helloworld Verticle is started");
+  }
+
+  //called after undeployed from the vert engine
+  @Override
+  public void stop() throws Exception {
+    super.stop();
+    System.out.println("HelloWorld  Vertical stopped");
+
+  }
+
+
+}
+.....................................................................................
+
+Way 2: From plain java code how to deploy verticles.
+
+package com.amex;
+
+import io.vertx.core.Vertx;
+
+public class DeployerMain {
+  public static void main(String[] args) {
+      //you can deploy
+    Vertx vertx = Vertx.vertx();
+    vertx.deployVerticle(new MainVerticle());
+  }
+}
+This code will not call life cycle method like stops, mostly not this pattern not recommended.
+
+Way 3: Using explcit Lanucher /Runner class without using pom.xml configuration.
+
+package com.amex;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+
+public class LanucherDeployer extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run",LanucherDeployer.class.getName());
+  }
+
+  @Override
+  public void start() throws Exception {
+    super.start();
+      vertx.deployVerticle(MainVerticle.class.getName());
+  }
+
+  @Override
+  public void stop() throws Exception {
+    super.stop();
+    System.out.println("Launcher stop");
+  }
+}
+.....................................................................................
 
 
 

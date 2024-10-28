@@ -1,8 +1,6 @@
 package com.amex;
 
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Context;
-import io.vertx.core.Vertx;
 
 public class HelloWorldVerticle extends AbstractVerticle {
   //called after this verticle deployed on vertx engine
@@ -16,5 +14,9 @@ public class HelloWorldVerticle extends AbstractVerticle {
   @Override
   public void stop() throws Exception {
     super.stop();
+    System.out.println("HelloWorld  Vertical stopped");
+
   }
+
+
 }
