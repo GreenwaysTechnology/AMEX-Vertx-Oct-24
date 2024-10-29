@@ -1733,6 +1733,433 @@ Buffer from byte Array:
 byte[] bytes= new Byte[] {3,6,30};
 Buffer buffer=Buffer.buffer(bytes)
 
+package com.amex.dataformats;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.buffer.Buffer;
+
+public class BufferVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run",BufferVerticle.class.getName());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    super.start(startPromise);
+    //create buffer object
+    Buffer buffer = Buffer.buffer("hello");
+    //add more data into buffer
+    buffer.appendString("welcome");
+    System.out.println(buffer);
+  }
+}
+/////////////////////////////////////////////////////////////////////////////////////
+			  JSON Object
+
+package com.amex.dataformats;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+
+public class JsonVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", JsonVerticle.class.getName());
+  }
+
+  //simple json object
+  private void createSimpleJson() {
+    JsonObject profile = new JsonObject();
+    //adding properties
+    profile.put("id", 1);
+    profile.put("name", "Subramanian");
+    profile.put("status", true);
+    System.out.println("Id : " + profile.getString("id"));
+    System.out.println("Name : " + profile.getString("name"));
+    System.out.println("Status : " + profile.getString("status"));
+    int id = profile.getInteger("id");
+    String name = profile.getString("name");
+    boolean status = profile.getBoolean("status");
+    System.out.println(id + " " + name + "" + status);
+    //key value pair in json format
+    System.out.println(profile.encodePrettily());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    createSimpleJson();
+  }
+}
+....................................................................................
+			Are you fluent?
+
+
+A fluent API is where multiple methods calls can be chained together - Based Builder/Command Chain pattern.
+
+Best eg:
+  strings
+
+ "hello".toString().toUpperCase().trim()
+
+Most of the vertx apis are fluent api, so recommended to use fluent api style.
+
+
+package com.amex.dataformats;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
+
+public class JsonVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", JsonVerticle.class.getName());
+  }
+
+  //simple json object
+  private void createSimpleJson() {
+    JsonObject profile = new JsonObject();
+    //adding properties
+    profile.put("id", 1);
+    profile.put("name", "Subramanian");
+    profile.put("status", true);
+    System.out.println("Id : " + profile.getString("id"));
+    System.out.println("Name : " + profile.getString("name"));
+    System.out.println("Status : " + profile.getString("status"));
+    int id = profile.getInteger("id");
+    String name = profile.getString("name");
+    boolean status = profile.getBoolean("status");
+    System.out.println(id + " " + name + "" + status);
+    //key value pair in json format
+    System.out.println(profile.encodePrettily());
+  }
+
+  private void createFluentJson() {
+    JsonObject profile = new JsonObject()
+      .put("id", 1)
+      .put("name", "Subramanian")
+      .put("status", true);
+    System.out.println(profile.encodePrettily());
+  }
+
+  //nested json
+  private void createNestedJson() {
+    JsonObject profile = new JsonObject().put("id", 1).put("name", "Subramanian").put("status", true).put("address", new JsonObject().put("street", "10th street").put("city", "Coimbatore"));
+    System.out.println(profile.encodePrettily());
+  }
+
+  //Array of json
+  private void createJsonArray() {
+    JsonObject profile = new JsonObject().put("id", 1).put("name", "Subramanian").put("status", true).put("address", new JsonObject().put("street", "10th street").put("city", "Coimbatore"));
+    JsonArray profiles = new JsonArray()
+      .add(profile)
+      .add(new JsonObject().put("id", 2).put("name", "Murugan").put("status", false).put("address", new JsonObject().put("street", "8th street").put("city", "Chennai")));
+    System.out.println(profiles.encodePrettily());
+  }
+
+  private void mergeJson(JsonObject jsonObject) {
+    JsonObject config = new JsonObject().put("http.port", 8080).mergeIn(jsonObject);
+    System.out.println(config.encodePrettily());
+  }
+
+  public Future<JsonObject> getJsonFuture() {
+    JsonObject profile = new JsonObject().put("id", 1).put("name", "Subramanian").put("status", true).put("address", new JsonObject().put("street", "10th street").put("city", "Coimbatore"));
+    return Future.succeededFuture(profile);
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    // createSimpleJson();
+    //createFluentJson();
+    //createNestedJson();
+    // createJsonArray();
+    //mergeJson(new JsonObject().put("host", "localhost").put("ssl", true));
+    getJsonFuture().onSuccess(json -> {
+      System.out.println(json.encodePrettily());
+    });
+  }
+}
+.....................................................................................
+.....................................................................................	
+			 Building Non blocking or Async apps
+.....................................................................................
+
+in order to build non blocking io apps (network,filesystem) and timers, language or framework/lib/toolkit has to provide basic requirment.
+
+1.Runtime should have faciltity to talk to low level operating system non blocking apis such as "select/poll/epoll-linux, iocp-windows,kqueue-mac,unix".
+
+2.For Application developers , the language or framework/lib/toolkit must provide high level apis in order to communicate low level system calls api - vertx provides high level apis.
+
+3.At runtime level, Runtime must provide threading features to listen for os kernal events. Event loop threads.
+
+4.Program level, we must bind function to handle such events(callbacks)
+
+Vertx non blocking apis:
+.......................
+
+1.Timer 
+2.File System
+3.Http Api
+4.Socket api
+5.Udp and DataGram 
+etc....
+
+.....................................................................................
+				Timer
+........................................................................
+
+It is common in vertx to want to perform some action after a certain delay or perdically.
+
+Timer is special non blocking api which schdules any task in delayed manner which does not block the current thread.
+
+Task is executed by "CPU" level.
+
+Timer is not part of FileDecriptor table because it is not an IO operation.
+
+
+Types of timers:
+1.one-shot timers
+2.Periodic timers.
+
+one-shot Timers:
+ once timeout occured, the cpu emits event , and it closes the flow.
+
+package com.amex.async.timers;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+
+public class OneShortTimerVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", OneShortTimerVerticle.class.getName());
+  }
+
+  private void blockMe(String message) {
+    System.out.println(message);
+  }
+
+  private void delay() {
+    //async
+    vertx.setTimer(5000, handler -> {
+      //this code to be executed after 5000ms
+      System.out.println("I am delayed Task");
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    blockMe("start");
+    delay();
+    blockMe("stop");
+  }
+}
+...................................................................................
+		 How to transfer data with Timer to the caller
+...................................................................................
+package com.amex.async.timers;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+
+
+public class TimerWIthDataVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", TimerWIthDataVerticle.class.getName());
+  }
+
+  private void blockMe(String message) {
+    System.out.println(message);
+  }
+
+  private Future<JsonObject> delay() {
+    //async
+    //Return Future object with data after 5000ms
+    return Future.future(ar -> {
+      JsonObject jsonObject = new JsonObject().put("message", "Hello");
+      vertx.setTimer(5000, handler -> {
+        //call future complete
+        ar.complete(jsonObject);
+      });
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    blockMe("start");
+    delay().onSuccess(jsonObject -> {
+      System.out.println(jsonObject.encodePrettily());
+    });
+    blockMe("stop");
+  }
+}
+.....................................................................................
+		 Passing data using callback pattern - Higher Order function
+.....................................................................................
+
+Passing function as parameter.
+
+package com.amex.async.timers;
+
+import io.vertx.core.*;
+import io.vertx.core.json.JsonObject;
+
+
+public class TimerWithHigherOrderVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", TimerWithHigherOrderVerticle.class.getName());
+  }
+
+  private void blockMe(String message) {
+    System.out.println(message);
+  }
+
+  //Higher order function syntax:
+  private void getMessage(Handler<AsyncResult<JsonObject>> aHandler) {
+    vertx.setTimer(5000, handler -> {
+      //send json object with Future
+      JsonObject jsonObject = new JsonObject().put("message", "Hello");
+      aHandler.handle(Future.succeededFuture(jsonObject));
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    blockMe("start");
+    getMessage(response -> {
+      System.out.println(response.result().encodePrettily());
+    });
+    blockMe("stop");
+  }
+}
+.....................................................................................
+			   Periodic Timers
+.....................................................................................
+
+Periodic timers are getting executed after time infinitely until we stop.
+
+
+Simple Periodic Timer:
+package com.amex.async.timers;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+
+public class PeriodicTimerVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", PeriodicTimerVerticle.class.getName());
+  }
+
+  private void tick() {
+    vertx.setPeriodic(1000, handler -> {
+      System.out.println(Math.random());
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    tick();
+  }
+}
+.....................................................................................
+		   How to return Data from the Periodic Timer
+....................................................................................
+
+package com.amex.async.timers;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Future;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+
+
+public class PeriodicTimerWithDataVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", PeriodicTimerWithDataVerticle.class.getName());
+  }
+
+  private Future<JsonObject> poll() {
+    return Future.future(ar -> {
+      JsonObject jsonObject = new JsonObject().put("random", Math.random());
+      vertx.setPeriodic(5000, handler -> {
+        ar.complete(jsonObject);
+      });
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    poll().onSuccess(res -> {
+      System.out.println(res.encodePrettily());
+    });
+  }
+}
+
+Result:
+{
+  "random" : 0.11410139186857493
+}
+Oct 29, 2024 11:38:57 AM io.vertx.core.impl.ContextImpl
+SEVERE: Unhandled exception
+java.lang.IllegalStateException: Result is already complete
+
+
+Here we got result one time, after that we got exception, because the future is already returned, again that method will not be called.
+
+Solution:
+ Using higher order syntax.
+
+package com.amex.async.timers;
+
+import io.vertx.core.*;
+import io.vertx.core.json.JsonObject;
+
+
+public class PeriodicTimerWithDataVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", PeriodicTimerWithDataVerticle.class.getName());
+  }
+
+  //  private Future<JsonObject> poll() {
+//    return Future.future(ar -> {
+//      JsonObject jsonObject = new JsonObject().put("random", Math.random());
+//      vertx.setPeriodic(5000, handler -> {
+//        ar.complete(jsonObject);
+//      });
+//    });
+//  }
+  private void poll(Handler<AsyncResult<JsonObject>> aHandler) {
+    vertx.setPeriodic(5000, handler -> {
+      JsonObject jsonObject = new JsonObject().put("random", Math.random());
+      aHandler.handle(Future.succeededFuture(jsonObject));
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+//    poll().onSuccess(res -> {
+//      System.out.println(res.encodePrettily());
+//    });
+    poll(res -> {
+      System.out.println(res.result().encodePrettily());
+    });
+  }
+}
+
+
+
+
+
 
 
 
