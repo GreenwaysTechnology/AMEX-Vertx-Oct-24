@@ -1,0 +1,350 @@
+				Vertx Web Development
+.....................................................................................
+Core features of vertx web development
+
+-it is non blocking - min number of threads are used- there is no request per thread model.
+-it is reactive, so that data streaming ,processing is possible.
+
+
+Web App development in vertx:
+
+Vertx is fully powered with non blocking apis.
+Vertx supports http prototcal to build non blocking web apps.
+
+Modules In web space:
+
+1.vertx core http module.
+2.vertx-web module - It is minialistic framework to build realtime Webservices and dynamic web apps
+3.vertx-webclient -  Service interaction api via  http Protocal
+
+
+HTTP Core module Object:
+
+1.HttpServer
+   -Used to build web containers
+   -Used to handle incomming request and sending response.
+2.HttpServerRequest
+   -Object used to handle incoming request
+   -has api called response() to get Resonse Object
+3.HttpServerResponse
+   -Object used to send resonse to clients
+
+
+Simple Vertx WebServer:
+package com.amex.webapp;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.http.HttpServer;
+import io.vertx.core.http.HttpServerResponse;
+
+public class HelloWorldWebServerVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", HelloWorldWebServerVerticle.class.getName());
+  }
+
+  private void startHttpServer() {
+    //create simple web server
+    HttpServer httpServer = vertx.createHttpServer();
+    //request handling
+    httpServer.requestHandler(request -> {
+      HttpServerResponse response = request.response();
+      //send output
+      response.end("Hello Vertx");
+    });
+
+    //start the server
+    httpServer.listen(8080, serverHandler -> {
+      System.out.println("Http Server is Running at " + serverHandler.result().actualPort());
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    startHttpServer();
+  }
+}
+
+Fluent Api:
+  private void startHttpServer() {
+    //create simple web server using fluent style
+    vertx.createHttpServer().requestHandler(req -> {
+      req.response().end("Hello");
+    }).listen(8080, server -> {
+      System.out.println("Http Server is Running at " + server.result().actualPort());
+      
+    });
+
+  }
+..............................................................................
+			   Reponse object properties
+
+-header
+-statuscode
+  vertx.createHttpServer()
+      .requestHandler(httpServerRequest -> {
+        httpServerRequest.response()
+          .setStatusCode(200)
+          .putHeader("content-type", "text/plain")
+          .putHeader("message", "HelloHeader")
+          .end("Hello");
+      }).listen(8080, server -> {
+        System.out.println("Http Server is running on --> " + server.result().actualPort());
+      });
+
+eg:
+package com.amex.webapp;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.http.HttpServerResponse;
+
+public class HttpResponseHeaders extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", HttpResponseHeaders.class.getName());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    vertx.createHttpServer()
+      .requestHandler(req -> {
+        req.response()
+          .setStatusCode(200)
+          .putHeader("content-type", "text/plain")
+          .putHeader("secret", "abc23232")
+          .end("Hello");
+      })
+      .listen(8080)
+      .onSuccess(httpServer -> {
+        System.out.println("Server is Running at " + httpServer.actualPort());
+        startPromise.complete();
+      });
+  }
+}
+..................................................................................
+			 Sending JSON Payload
+.................................................................................
+
+package com.amex.webapp;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+
+public class JsonResponseVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", JsonResponseVerticle.class.getName());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    JsonObject jsonObject = new JsonObject().put("message", "Hello");
+
+    vertx.createHttpServer()
+      .requestHandler(req -> {
+        req.response()
+          .setStatusCode(200)
+          .putHeader("content-type", "application/json")
+          .end(jsonObject.encodePrettily());
+      })
+      .listen(8080)
+      .onSuccess(httpServer -> {
+        System.out.println("Server is Running at " + httpServer.actualPort());
+        startPromise.complete();
+      });
+  }
+}
+....................................................................................
+		How to read Request payload
+....................................................................................
+
+package com.amex.webapp;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+
+public class IncomingPayloadVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", IncomingPayloadVerticle.class.getName());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    vertx.createHttpServer()
+      .requestHandler(req -> {
+        req.bodyHandler(buffer -> {
+          System.out.println(buffer.toJsonObject().encodePrettily());
+          req.response().setStatusCode(201).end("Read");
+        }).endHandler(handler -> {
+          System.out.println("end handler");
+        });
+      })
+      .listen(8080)
+      .onSuccess(httpServer -> {
+        System.out.println("Server is Running at " + httpServer.actualPort());
+        startPromise.complete();
+      });
+  }
+}
+.....................................................................................
+		How to build Restfull web services
+.....................................................................................
+
+Rest spec:
+
+1.You must have end point which represents "Resource" / Domain
+  ProductResource,CustomerResource
+
+2.Each Endpoint/Resource must be identified by uniqly by "URL"
+  /api/customers /api/products
+
+3.Each Resource must have apis called methods which must be identified by HTTP verbs
+
+  GET /api/customers
+  POST /api/customers
+  PUT /api/customers/1
+  DELTE /api/customers/1
+ 
+Vert.x Web
+ A tool-kit for writing sophisticated modern web applications and HTTP microservices.
+
+Objects in Vertx-Web:
+
+1.RoutingContext
+   Encapsulate both req and res objects
+2.Router
+   This object is used to map url and http method
+
+2.Route
+
+HelloWorld Router:
+package com.amex.webapp.router;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.ext.web.Router;
+
+public class HelloWorldRouter extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", HelloWorldRouter.class.getName());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    //Create Router
+    Router router = Router.router(vertx);
+    //EXPOSE API
+    router.get("/api/hello").handler(routingContext -> {
+      //get response object
+      routingContext.response().end("Hello");
+    });
+    //Create Http server attach Router
+    vertx.createHttpServer().requestHandler(router).listen(8080).onSuccess(server -> {
+      System.out.println("Http server is running at " + server.actualPort());
+    });
+  }
+}
+.....................................................................................
+			CURD Operations
+......................................................................................
+package com.amex.webapp.router;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.RequestBody;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.BodyHandler;
+
+public class CrudVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", CrudVerticle.class.getName());
+  }
+
+  //InMemory store
+  JsonObject store = new JsonObject();
+
+  //biz logic
+  private void getAllItems(RoutingContext rc) {
+    rc.response().putHeader("content-type", "application/json").setStatusCode(200).end(store.encodePrettily());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    Router router = Router.router(vertx);
+    //Enable body handler , so that all incoming payload will be available inside Routing Context
+    router.route().handler(BodyHandler.create());
+    //Expose api
+    router.get("/api/items").handler(this::getAllItems);
+    router.post("/api/items").handler(this::createItem);
+    router.put("/api/items/:id").handler(this::updateItem);
+    router.delete("/api/items/:id").handler(this::removeItem);
+
+    //Create Http server attach Router
+    vertx.createHttpServer().requestHandler(router).listen(8080).onSuccess(server -> {
+      System.out.println("Http server is running at " + server.actualPort());
+    });
+  }
+
+  private void removeItem(RoutingContext routingContext) {
+    String id = routingContext.request().getParam("id");
+    JsonObject item = routingContext.body().asJsonObject();
+    if (store.containsKey(id)) {
+      store.remove(id);
+      routingContext.response().setStatusCode(200).end("Item removed");
+
+    } else {
+      routingContext.response().setStatusCode(404).end("Item not Found");
+
+    }
+  }
+
+  private void updateItem(RoutingContext routingContext) {
+    String id = routingContext.request().getParam("id");
+    JsonObject item = routingContext.body().asJsonObject();
+    if (store.containsKey(id)) {
+      store.put(id, item);
+      routingContext.response().setStatusCode(200).end("Item Updated");
+
+    } else {
+      routingContext.response().setStatusCode(404).end("Item not Found");
+
+    }
+  }
+
+  private void createItem(RoutingContext routingContext) {
+    RequestBody body = routingContext.body();
+    System.out.println(body.asJsonObject().encodePrettily());
+    JsonObject item = body.asJsonObject();
+    store.put(item.getString("id"), item);
+    routingContext.response().setStatusCode(201).end("Item created");
+  }
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
