@@ -473,6 +473,22 @@ Steps:
  <classifier>processor</classifier>
  <scope>provided</scope>
 </dependency>
+
+Add Plugin to generate code under source directory:
+<plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <annotationProcessors>
+            <annotationProcessor>io.vertx.codegen.CodeGenProcessor</annotationProcessor>
+          </annotationProcessors>
+          <generatedSourcesDirectory>
+            ${project.basedir}/src/main/generated
+          </generatedSourcesDirectory>
+          <compilerArgs>
+            <arg>-AoutputDirectory=${project.basedir}/src/main</arg>
+          </compilerArgs>
+        </configuration>
+      </plugin>
    
    This dependencies are used to generate hidden proxy classes, where all services are exposed at event bus.
 
@@ -579,16 +595,469 @@ public class MyClientServiceVerticle extends AbstractVerticle {
   }
 }
 
+Step:
+package com.amex.services;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+
+public class MainVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+       vertx.deployVerticle(new ServiceProxyRegisterationVerticle());
+       vertx.deployVerticle(new MyClientServiceVerticle());
+  }
+}
+
+PS G:\AMX\2024\oct\serviceproxies> ./mvnw clean compile exec:java
+
+.....................................................................................
+			Service Proxy,Rest api, JDBC
+.....................................................................................
+
+Steps:
+1.Database setup
+ -MySql database.
+
+docker run --name my-mysql -e MYSQL_ROOT_PASSWORD=myroot -e MYSQL_DATABASE=mydb -e MYSQL_USER=myuser -e MYSQL_PASSWORD=mypassword -p 3306:3306  mysql:8.0
+
+
+2.Test Mysql is connected and create database
+
+docker exec -it my-mysql mysql -u myuser -p
+
+mysql> use mydb;
+Database changed
+mysql> show tables;
+Empty set (0.00 sec)
 
 
 
+3.Create tables
+ CREATE TABLE users(
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL
+ );
+
+4.Create Service Interface
+package com.amex.services.jdbc;
+
+import io.vertx.codegen.annotations.ProxyGen;
+import io.vertx.codegen.annotations.VertxGen;
+import io.vertx.core.Future;
+import io.vertx.core.json.JsonObject;
+import java.util.List;
+
+@ProxyGen
+@VertxGen
+public interface UserService {
+  Future<JsonObject> getUserById(int id);
+  Future<List<JsonObject>> getAllUsers();
+  Future<Void> createUser(JsonObject user);
+  Future<Void> updateUser(int id, JsonObject user);
+  Future<Void> deleteUser(int id);
+}
+
+4.1.Project Dependency
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-jdbc-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>mysql</groupId>
+      <artifactId>mysql-connector-java</artifactId>
+      <version>8.0.33</version>
+    </dependency>
+
+5.Service Implementation.
+package com.amex.services.jdbc;
+
+import io.vertx.core.Future;
+import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.jdbc.JDBCClient;
+import io.vertx.ext.sql.SQLConnection;
+import java.util.List;
+
+public class UserServiceImpl implements UserService {
+
+  private final JDBCClient jdbcClient;
+
+  public UserServiceImpl(   Vertx vertx, JsonObject dbConfig) {
+    this.jdbcClient = JDBCClient.createShared(vertx, dbConfig);
+  }
+
+  @Override
+  public Future<JsonObject> getUserById(int id) {
+    return Future.future(future -> jdbcClient.getConnection(ar -> {
+      if (ar.succeeded()) {
+        SQLConnection connection = ar.result();
+        connection.queryWithParams("SELECT * FROM users WHERE id = ?", new JsonArray().add(id), res -> {
+          if (res.succeeded()) {
+            if (res.result().getNumRows() > 0) {
+              future.complete(res.result().getRows().get(0));
+            } else {
+              future.fail("User not found");
+            }
+          } else {
+            future.fail(res.cause());
+          }
+          connection.close();
+        });
+      } else {
+        future.fail(ar.cause());
+      }
+    }));
+  }
+
+  @Override
+  public Future<List<JsonObject>> getAllUsers() {
+    return Future.future(future -> jdbcClient.getConnection(ar -> {
+      if (ar.succeeded()) {
+        SQLConnection connection = ar.result();
+        connection.query("SELECT * FROM users", res -> {
+          if (res.succeeded()) {
+            future.complete(res.result().getRows());
+          } else {
+            future.fail(res.cause());
+          }
+          connection.close();
+        });
+      } else {
+        future.fail(ar.cause());
+      }
+    }));
+  }
+
+  @Override
+  public Future<Void> createUser(JsonObject user) {
+    return Future.future(future -> jdbcClient.getConnection(ar -> {
+      if (ar.succeeded()) {
+        SQLConnection connection = ar.result();
+        connection.updateWithParams("INSERT INTO users (name, email) VALUES (?, ?)",
+          new JsonArray().add(user.getString("name")).add(user.getString("email")), res -> {
+            if (res.succeeded()) {
+              future.complete();
+            } else {
+              future.fail(res.cause());
+            }
+            connection.close();
+          });
+      } else {
+        future.fail(ar.cause());
+      }
+    }));
+  }
+
+  @Override
+  public Future<Void> updateUser(int id, JsonObject user) {
+    return Future.future(future -> jdbcClient.getConnection(ar -> {
+      if (ar.succeeded()) {
+        SQLConnection connection = ar.result();
+        connection.updateWithParams("UPDATE users SET name = ?, email = ? WHERE id = ?",
+          new JsonArray().add(user.getString("name")).add(user.getString("email")).add(id), res -> {
+            if (res.succeeded()) {
+              future.complete();
+            } else {
+              future.fail(res.cause());
+            }
+            connection.close();
+          });
+      } else {
+        future.fail(ar.cause());
+      }
+    }));
+  }
+
+  @Override
+  public Future<Void> deleteUser(int id) {
+    return  Future.future(future->jdbcClient.getConnection(ar -> {
+      if (ar.succeeded()) {
+        SQLConnection connection = ar.result();
+        connection.updateWithParams("DELETE FROM users WHERE id = ?", new JsonArray().add(id), res -> {
+          if (res.succeeded()) {
+            future.complete();
+          } else {
+            future.fail(res.cause());
+          }
+          connection.close();
+        });
+      } else {
+        future.fail(ar.cause());
+      }
+    }));
+  }
+}
 
 
 
+Step 6:Add Code Gen instructions - package-info.java
+
+@io.vertx.codegen.annotations.ModuleGen(groupPackage = "com.amex.services.jdbc", name = "userjdbcservice", useFutures = true)
+package com.amex.services.jdbc;
+
+ Add this file where the service interface is present
+
+Step 7: Generate Proxy classes
+
+G:\AMX\2024\oct\serviceproxies> ./mvnw compile
+
+After this , you can watch target or generated folder, where proxy classes have been generated.
+
+Step 8:Service Class Registration.
+
+package com.amex.services.jdbc;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.serviceproxy.ServiceBinder;
+
+import io.vertx.core.json.JsonObject;
+
+public class UserServiceRegistrationVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) {
+
+    JsonObject dbConfig = config();
+    dbConfig.put("url", "jdbc:mysql://localhost:3306/mydb");
+    dbConfig.put("driver_class", "com.mysql.cj.jdbc.Driver");
+    dbConfig.put("user", "myuser");
+    dbConfig.put("password", "mypassword");
+
+    UserService userService = new UserServiceImpl(vertx, dbConfig);
+
+    new ServiceBinder(vertx).setAddress("user.service.address").register(UserService.class, userService);
+    startPromise.complete();
+  }
+}
+
+Step 9:Service Rest api
+package com.amex.services.jdbc;
+
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.serviceproxy.ServiceProxyBuilder;
+
+public class UserClientVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) {
+    UserService userService = new ServiceProxyBuilder(vertx)
+      .setAddress("user.service.address")
+      .build(UserService.class);
+
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    router.get("/api/users").handler(routingContext -> {
+      // Example usage
+      userService.getAllUsers().onComplete(res -> {
+        if (res.succeeded()) {
+          System.out.println(res.result());
+          routingContext.response().putHeader("content-type", "application/json").end(res.result().toString());
+        } else {
+          System.err.println("Failed to fetch");
+        }
+      });
+    });
+    vertx.createHttpServer().requestHandler(router).listen(8080).onComplete(server -> {
+      System.out.println("server is running " + server.result().actualPort());
+    });
+
+  }
+}
+
+Step 10 : Deploy all verticles
+package com.amex.services.jdbc;
+
+import io.vertx.core.Vertx;
+
+public class Deployer {
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    vertx.deployVerticle(new UserClientVerticle());
+    vertx.deployVerticle(new UserServiceRegistrationVerticle());
+
+  }
+}
 
 
 
+Step 11: Running
 
+.....................................................................................
+			@Data Annotation
+How to map pojo or DTO or entity class in vertx to send data and receive data
 
+@Data annotation is used to mark a POJO as a data object for vertx code generation.
+allowing json conversion and other features.
 
+Project dependencies:
+  <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-web</artifactId>
+    </dependency>
+
+<dependency>
+ <groupId>io.vertx</groupId>
+ <artifactId>vertx-codegen</artifactId>
+ <version>4.5.10</version>
+ <classifier>processor</classifier>
+ <scope>provided</scope>
+</dependency>
+
+  <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>2.13.0</version>
+    </dependency>
+
+  <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <annotationProcessors>
+            <annotationProcessor>io.vertx.codegen.CodeGenProcessor</annotationProcessor>
+          </annotationProcessors>
+          <generatedSourcesDirectory>
+            ${project.basedir}/src/main/generated
+          </generatedSourcesDirectory>
+          <compilerArgs>
+            <arg>-AoutputDirectory=${project.basedir}/src/main</arg>
+          </compilerArgs>
+        </configuration>
+      </plugin>
+
+package com.amex.dto;
+
+import io.vertx.codegen.annotations.DataObject;
+import io.vertx.core.json.JsonObject;
+
+@DataObject(generateConverter = true)
+public class User {
+  private String name;
+  private int id;
+  private String email;
+
+  public User() {
+  }
+
+  public User(String name, int id, String email) {
+    this.name = name;
+    this.id = id;
+    this.email = email;
+  }
+
+  public String getName() {
+    return name;
+  }
+
+  public void setName(String name) {
+    this.name = name;
+  }
+
+  public int getId() {
+    return id;
+  }
+
+  public void setId(int id) {
+    this.id = id;
+  }
+
+  public String getEmail() {
+    return email;
+  }
+
+  public void setEmail(String email) {
+    this.email = email;
+  }
+}
+
+compile this code, after compilation converter classes have been generated 
+
+After generation, you can add extra apis
+
+package com.amex.dto;
+
+import io.vertx.codegen.annotations.DataObject;
+import io.vertx.core.json.JsonObject;
+
+@DataObject(generateConverter = true)
+public class User {
+  private String name;
+  private int id;
+  private String email;
+
+  public User() {
+  }
+
+  //you can write json constructor
+  public User(JsonObject json) {
+    UserConverter.fromJson(json, this);
+  }
+
+  public JsonObject toJson() {
+    JsonObject json = new JsonObject();
+    UserConverter.toJson(this, json);
+    return json;
+  }
+
+  public User(String name, int id, String email) {
+    this.name = name;
+    this.id = id;
+    this.email = email;
+  }
+
+  public String getName() {
+    return name;
+  }
+
+  public void setName(String name) {
+    this.name = name;
+  }
+
+  public int getId() {
+    return id;
+  }
+
+  public void setId(int id) {
+    this.id = id;
+  }
+
+  public String getEmail() {
+    return email;
+  }
+
+  public void setEmail(String email) {
+    this.email = email;
+  }
+}
+
+Testing:
+package com.amex;
+
+import com.amex.dto.User;
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+
+public class MainVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+
+    User user = new User("Subramanian", 1, "sasubramanian_md@hotmail.com");
+    //Convert user to Json
+    JsonObject json = user.toJson();
+    System.out.println(json.encodePrettily());
+    //Convert json to User
+    User newUser = new User(json);
+    System.out.println(newUser.getId() + " " + newUser.getName() + " " + newUser.getEmail());
+  }
+}
 
