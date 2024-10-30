@@ -181,6 +181,408 @@ Task:
   ProductConsumer Service, must communicate Productservice via web client.
   get,post,delete,update.
 ....................................................................................
+	    Messaging - use asynchronous messaging for inter-service communication
+....................................................................................
+
+When Rest services are talking each other there are some drawbacks
+
+1.what if the other service other than rest - communication is hard.
+2.when rest service calls other rest service, callee must be always present - Tight   coupled communication  
+3.if services are exchanging in real time like streaming
+
+Message Oriented Communication:
+..............................
+Asynchronous messaging technologies
+
+1.Apache Kafka
+2.RabbitMQ
+3.Vertx Event Bus
+
+Vertx Implmentation:
+
+1.Vertx Event Bus
+2.Vertx Kafka client
+
+
+Event Bus:
+
+1.Event bus is nerve system of vertx systems
+2.Vertx by default is distributed
+3.Vertx is built based distributed arch
+4.In Vertx verticles can exchange messages via event bus which is centerialized broker
+5.Vertx Event bus uses tcp protocal to transmit messages
+6.Vertx Event bus data format is json and buffer.
+
+Event Bus:
+ Event bus has been implemented based on "Actor-Model Design Pattern".
+
+Event Bus allows verticles sends data from one place to another place
+
+Event bus sends message in three ways:
+
+1.pub/sub - one to many
+2.point to Point - one to one
+3.Request/Reply - one One with ack.
+
+Event bus uses unique address to publish and consume messages.
+  Event bus publishes message to a specific "address" and reads message from that address.
+
+
+Handlers:
+ since vertx is non blocking, messages are processed by handlers, you have to register that handler at an address.
+
+Type data:
+ can be primitive, objects
+
+Per Vertx Engine only one event bus- singleton.
+.....................................................................................
+			Pub/sub,point to point,request-reply
+....................................................................................
+
+Use case:
+ 1.Rest/HTTP verticle which publish message to event bus, we have other back end verticles which listens on event bus.
+
+
+Steps:
+1.Event Bus address class
+package com.amex.eventbus;
+
+public class Address {
+  public static final String PRODUCT_INFO = "product.info";
+  public static final String BILLING_INFO = "billing.info";
+  public static final String IS_STOCK_AVAILABLE = "stock.available";
+}
+
+Request -Reply Pattern:
+
+1.Publisher
+package com.amex.eventbus;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.eventbus.Message;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
+
+public class ProductRestApiVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", ProductRestApiVerticle.class.getName());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    router.post("/api/products").handler(routingContext -> {
+      JsonObject products = routingContext.body().asJsonObject();
+      //publish message on ProductInfo address
+      vertx.eventBus().request(Address.PRODUCT_INFO, products)
+        .onSuccess(handler -> {
+          System.out.println(handler.body());
+        }).onFailure(err -> {
+        });
+    });
+
+  }
+}
+
+2.Consumer
+package com.amex.eventbus;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.MessageConsumer;
+import io.vertx.core.json.JsonObject;
+
+public class RequestReplyVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    EventBus eventBus = vertx.eventBus();
+    MessageConsumer<JsonObject> consumer = eventBus.consumer(Address.PRODUCT_INFO);
+    consumer.handler(message -> {
+      System.out.println("I have received a message: " + message.body().encodePrettily());
+      message.reply("how interesting!");
+    });
+  }
+}
+
+Deployer
+
+package com.amex.eventbus;
+
+import io.vertx.core.Vertx;
+
+public class Deployer {
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    vertx.deployVerticle(new ProductRestApiVerticle());
+    vertx.deployVerticle(new RequestReplyVerticle());
+  }
+}
+
+Fire and Forget: Point to Point
+................................
+
+Producer/Publisher:
+...................
+
+package com.amex.eventbus;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.eventbus.Message;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
+
+public class ProductRestApiVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    router.get("/api/products/:id").handler(routingContext -> {
+      String id = routingContext.pathParam("id");
+      vertx.eventBus().send("point.point", id);
+      routingContext.response().end("Point to Point");
+    });
+
+    vertx.createHttpServer().requestHandler(router).listen(8080).onSuccess(server -> {
+      System.out.println("Http server is running at " + server.actualPort());
+    });
+
+  }
+}
+
+Consumer:
+package com.amex.eventbus;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.eventbus.EventBus;
+
+public class PointToPointVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    EventBus eb = vertx.eventBus();
+    eb.consumer("point.point", message -> {
+      System.out.println("I have received a message: " + message.body());
+    });
+  }
+}
+.....................................................................................
+			One to Many -Pub/Sub
+.....................................................................................
+
+Producer:
+package com.amex.eventbus;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.eventbus.Message;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
+
+public class ProductRestApiVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    router.get("/api/products/offers/:message").handler(routingContext -> {
+      String message = routingContext.pathParam("message");
+      vertx.eventBus().publish("pub.sub", message);
+      routingContext.response().end("Pub to Sub");
+    });
+
+
+    vertx.createHttpServer().requestHandler(router).listen(8080).onSuccess(server -> {
+      System.out.println("Http server is running at " + server.actualPort());
+    });
+
+  }
+}
+
+Consumer:
+package com.amex.eventbus;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.eventbus.EventBus;
+
+public class PubSubVerticle extends AbstractVerticle {
+
+  private void subscriberOne() {
+    EventBus eb = vertx.eventBus();
+    eb.consumer("pub.sub", message -> {
+      System.out.println("I have received a message: " + message.body());
+    });
+  }
+
+  private void subscriberTwo() {
+    EventBus eb = vertx.eventBus();
+    eb.consumer("pub.sub", message -> {
+      System.out.println("I have received a message: " + message.body());
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    subscriberOne();
+    subscriberTwo();
+  }
+}
+.....................................................................................
+			  Service Proxy
+.....................................................................................
+
+What is Service Proxy?
+
+  When you compose a Vert.x application, you may want to isolate a functionality somewhere and make it available to the rest of your application. That’s the main purpose of service proxies. It lets you expose "a service" on the event bus, so, any other Vert.x component can consume it, as soon as they know the address on which the service is published.
+
+ Service objects are exposed as message on eventbus, so that other parts of the app can read Service Objects message.
+
+ Service Obejcts are registered on Event indirectly, communication happens via generated proxy classes.
+
+
+Steps:
+
+1.create Project with following dependencies
+
+<dependency>
+ <groupId>io.vertx</groupId>
+ <artifactId>vertx-service-proxy</artifactId>
+ <version>4.5.10</version>
+</dependency>
+
+<dependency>
+ <groupId>io.vertx</groupId>
+ <artifactId>vertx-codegen</artifactId>
+ <version>4.5.10</version>
+ <classifier>processor</classifier>
+ <scope>provided</scope>
+</dependency>
+   
+   This dependencies are used to generate hidden proxy classes, where all services are exposed at event bus.
+
+Step 2:Define service with Service Interface.
+
+package com.amex.services;
+
+import io.vertx.codegen.annotations.ProxyGen;
+import io.vertx.codegen.annotations.VertxGen;
+import io.vertx.core.Future;
+
+
+@VertxGen
+@ProxyGen
+public interface MyService {
+  //apis: always must be async: either you have to with handler or future
+  Future<String> sayHello();
+}
+
+Step 3: Implement the Service interface
+package com.amex.services;
+
+import io.vertx.core.Future;
+
+public class MyServiceImpl implements MyService{
+  @Override
+  public Future<String> sayHello() {
+     return  Future.succeededFuture("Hello Service Proxy");
+  }
+}
+
+Step 4:Add Code Gen instructions - package-info.java
+
+@io.vertx.codegen.annotations.ModuleGen(groupPackage = "com.amex.services", name = "helloservice", useFutures = true)
+package com.amex.services;
+
+ Add this file where the service interface is present
+
+  
+Step 5: Generate Proxy classes
+
+G:\AMX\2024\oct\serviceproxies> ./mvnw compile
+
+After this , you can watch target folder, where proxy classes have been generated.
+
+
+Step 6 : Register the service
+  Register the service on the event bus so it can be accessed via the proxy.
+
+package com.amex.services;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.serviceproxy.ServiceBinder;
+
+public class ServiceProxyRegisterationVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    //service registration :MyService
+    MyService myService = new MyServiceImpl();
+    new ServiceBinder(vertx).setAddress("my.service.address").register(MyService.class, myService);
+    //Next Service
+  }
+}
+
+Step 7: How to use the service proxy.
+ Create another verticle to test/access Service Proxy
+
+
+package com.amex.services;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.serviceproxy.ServiceProxyBuilder;
+
+public class MyClientServiceVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    //Get the Services from the proxy
+    MyService myService = new ServiceProxyBuilder(vertx).setAddress("my.service.address").build(MyService.class);
+
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    router.get("/api/hello").handler(routingContext -> {
+      myService.sayHello().onSuccess(res->{
+        System.out.println(res);
+        routingContext.response().end(res);
+      });
+
+    });
+
+
+    vertx.createHttpServer().requestHandler(router).listen(8080).onSuccess(server -> {
+      System.out.println("Http server is running at " + server.actualPort());
+    });    //invoke biz method
+
+
+  }
+}
+
+
+
+
+
 
 
 
