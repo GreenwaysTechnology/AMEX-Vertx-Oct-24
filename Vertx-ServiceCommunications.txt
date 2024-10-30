@@ -1,0 +1,192 @@
+			Vertx Service Communications
+.....................................................................................
+
+Types of distributed app
+
+1.Monolithic 
+2.Microservices
+
+ Microservices is architectural pattern for building distributed applications
+
+Microserves are collection of design patterns.
+https://microservices.io/
+
+Service is nothing but mini application in a domain.
+
+if you take domain called ecommerce where we have many modules such as  order,customer,payment
+
+order is one app which is called service.
+
+Service is collections of apis 
+
+apis are encapulsated within object which is called controller,message
+
+App = {Objects= {apis}}
+for eg: 
+ Rest 
+  Controller -> apis
+
+in order to perform biz work flow services need to talk each other - Service communications.
+
+Patterns for service communications:
+....................................
+1.Remote Procedure Invocation - use an RPI-based protocol for inter-service   communication
+2.Messaging - use asynchronous messaging for inter-service communication
+3.Domain-specific protocol - use a domain-specific protocol
+4.Idempotent Consumer - ensure that message consumers can cope with being invoked multiple times with the same message
+
+1.Remote Procedure Invocation - use an RPI-based protocol for inter-service   communication
+
+There are numerous examples of RPI technologies
+
+1.REST -HTTP
+2.gRPC -HTTP/2-TCP
+3.Apache Thrift - thrift -tcp
+
+REST service communication in vertx:
+....................................
+vertx-web client:
+
+Vert.x Web Client is an asynchronous HTTP and HTTP/2 client.
+
+The Web Client makes easy to do HTTP request/response interactions with a web server,
+
+
+Publisher /Callee :
+package com.amex.web.communiction;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
+
+public class GreeterVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", GreeterVerticle.class.getName());
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    //apis
+    router.get("/api/greet").handler(routingContext -> {
+      JsonObject message = new JsonObject().put("message", "Hello");
+      routingContext.response().putHeader("content-type", "application/json").end(message.encodePrettily());
+    });
+    vertx.createHttpServer().requestHandler(router).listen(8080).onComplete(server -> {
+      System.out.println("HTTP Server is Running at " + server.result().actualPort());
+    });
+  }
+}
+
+
+Consumer/Caller
+
+package com.amex.web.communiction;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.client.WebClient;
+import io.vertx.ext.web.handler.BodyHandler;
+
+public class HelloVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run" ,HelloVerticle.class.getName());
+  }
+  //delcare webclient
+  private WebClient webClient;
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    //create instance of webclient
+    webClient = WebClient.create(vertx);
+    //Router configuration
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    router.get("/api/hello").handler(routingContext -> {
+      //invoke Greeter Rest api via web client
+      webClient.get(8080, "localhost", "/api/greet")
+        .send().onSuccess(buffer -> {
+          routingContext.response().putHeader("content-type", "application/json").end(buffer.bodyAsString());
+        }).onFailure(err -> {
+          routingContext.response().end(err.getMessage());
+        });
+    });
+    vertx.createHttpServer().requestHandler(router).listen(8081).onComplete(server -> {
+      System.out.println("HTTP Server is Running at " + server.result().actualPort());
+    });
+
+  }
+}
+...............................................................................
+		 Web Client with Outside Webservice calls
+
+
+if your services wants to talk to external webservices, webclient provides a method
+called webClient.getAbs
+
+package com.amex.web.communiction.thirdparty;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Launcher;
+import io.vertx.core.Promise;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.client.WebClient;
+import io.vertx.ext.web.handler.BodyHandler;
+
+public class PostVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    Launcher.executeCommand("run", PostVerticle.class.getName());
+  }
+
+  //delcare webclient
+  private WebClient webClient;
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    webClient = WebClient.create(vertx);
+    //Router configuration
+    Router router = Router.router(vertx);
+    router.route().handler(BodyHandler.create());
+
+    router.get("/api/posts").handler(routingContext -> {
+      //invoke Greeter Rest api via web client
+      String url = "https://jsonplaceholder.typicode.com/posts";
+      webClient.getAbs(url).send().onSuccess(response -> {
+        routingContext.response().putHeader("content-type", "application/json").end(response.bodyAsString());
+      }).onFailure(err -> {
+
+      });
+
+    });
+    vertx.createHttpServer().requestHandler(router).listen(8080).onComplete(server -> {
+      System.out.println("HTTP Server is Running at " + server.result().actualPort());
+    });
+
+  }
+}
+Task:
+  Build Service
+  Product Service having all curd apis which talks to database 
+  ProductConsumer Service, must communicate Productservice via web client.
+  get,post,delete,update.
+....................................................................................
+
+
+
+
+
+
+
+
+
