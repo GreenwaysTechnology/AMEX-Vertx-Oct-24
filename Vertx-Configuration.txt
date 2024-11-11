@@ -1,0 +1,172 @@
+			Microservices configuration
+....................................................................................
+
+How to isloate the code/parameter which are dynamic?
+ like database connectionstrings,port,global variables.
+
+Vertx offers there is module called "Vert-x Config module".
+
+
+Vertx can read configuration data from various places which are called configuration storage(stores)
+
+Configuration stores:
+1.inmemory- JsonObject
+2.Files
+3.http servers
+4.Redis
+5.env variables
+6.System Properties
+
+Storage file format
+
+1.json
+2.yaml
+3.properties
+4.cocoon
+
+How to supply configuration data to the verticle?
+1.Using deployment options
+2.Using commandline args
+3.Using any storage options via "ConfigReteriver"
+
+In Memory Configuration:
+........................
+
+In AbstractVerticle class we have one method
+
+  /**
+   * Get the configuration of the verticle.
+   * <p>
+   * This can be specified when the verticle is deployed.
+   * @return the configuration
+   */
+  public JsonObject config() {
+    return context.config();
+  }
+
+How to supply inMemory config data to the verticle?
+
+During deployment of any verticle ,we can pass config data via DeploymentOptions Object.
+
+package com.amex;
+
+package com.amex;
+
+import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Vertx;
+import io.vertx.core.json.JsonObject;
+
+public class DeployerInMemory {
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    DeploymentOptions options = new DeploymentOptions().setConfig(
+      new JsonObject().put("message", "Hello")
+    );
+    vertx.deployVerticle(new InMemoryConfigVerticle(), options);
+  }
+}
+
+package com.amex;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+
+public class InMemoryConfigVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    System.out.println("starting");
+    JsonObject myconfig = config();
+    System.out.println(myconfig.encodePrettily());
+  }
+}
+...................................................................................
+		How to read configuration data from the File System
+..................................................................................
+
+A conf/config.json file. This path can be overridden using the vertx-config-path system property or VERTX_CONFIG_PATH environment variable.
+
+mostly it should be inside app/src/main/resources/conf/config.json
+
+
+Store options Configuration:
+
+ConfigStoreOptions httpStore = new ConfigStoreOptions()
+  .setType("http")
+  .setConfig(new JsonObject()
+    .put("host", "localhost").put("port", 8080).put("path", "/conf"));
+
+ConfigStoreOptions fileStore = new ConfigStoreOptions()
+  .setType("file")
+  .setConfig(new JsonObject().put("path", "my-config.json"));
+
+ConfigStoreOptions sysPropsStore = new ConfigStoreOptions().setType("sys");
+
+
+ConfigRetrieverOptions options = new ConfigRetrieverOptions()
+  .addStore(httpStore).addStore(fileStore).addStore(sysPropsStore);
+
+ConfigRetriever retriever = ConfigRetriever.create(vertx, options);
+
+eg:
+src/main/resources/conf/config.json
+{
+  "message": "Hello Config File",
+  "http.port": "8080"
+}
+
+package com.amex;
+
+import io.vertx.config.ConfigRetriever;
+import io.vertx.config.ConfigRetrieverOptions;
+import io.vertx.config.ConfigStoreOptions;
+import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Verticle;
+import io.vertx.core.Vertx;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
+
+public class FileConfigDeployer {
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    //Storage Options
+    ConfigStoreOptions fileStore = new ConfigStoreOptions()
+      .setType("file")
+      .setFormat("json")
+      .setConfig(new JsonObject().put("path", "conf/config.json"));
+
+    //Config Retriver
+    ConfigRetriever configRetriever = ConfigRetriever.create(vertx,
+      new ConfigRetrieverOptions().addStore(fileStore));
+    configRetriever.getConfig().onSuccess(myconfig -> {
+      System.out.println("Got Config");
+      System.out.println(myconfig.encodePrettily());
+      JsonObject config = new JsonObject().put("name", "Subramanian").mergeIn(myconfig);
+      DeploymentOptions deploymentOptions = new DeploymentOptions().setConfig(config);
+      vertx.deployVerticle(new ConfigFileVerticle(), deploymentOptions);
+    }).onFailure(err -> {
+      System.out.println("config failed to load");
+      System.out.println(err.getMessage());
+    });
+
+  }
+}
+
+
+
+package com.amex;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+
+public class ConfigFileVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    JsonObject config = config();
+    System.out.println(config.encodePrettily());
+  }
+}
+
+Task:
+ you can explore other configuration stores.

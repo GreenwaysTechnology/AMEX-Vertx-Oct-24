@@ -1,0 +1,4 @@
+{
+  "message": "Hello Config File",
+  "http.port": "8080"
+}
