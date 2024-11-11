@@ -1,0 +1,397 @@
+			 Vertx NonBlocking and Blocking Code
+				Threading Model
+.....................................................................................
+
+Vertx has been desinged to work with non blocking apps.
+  like web,database,tcp,file system etc....
+
+Does Vertx support blocking code and what if i write blocking code?
+ Yes! blocking code, what if i write blocking inside verticles
+
+Verticles by Defaults binds/ runs on non blocking threads-Event loop.
+
+Use Case: Testing threads.
+
+package com.amex.threads;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+
+public class NonBlockingVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    System.out.println(NonBlockingVerticle.class.getName() + " is running on " + Thread.currentThread().getName());
+  }
+}
+
+package com.amex.threads;
+
+import io.vertx.core.Vertx;
+
+public class Deployer {
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    vertx.deployVerticle(new NonBlockingVerticle());
+  }
+}
+
+Result:
+com.amex.threads.NonBlockingVerticle is running on vert.x-eventloop-thread-0
+
+Here you can notice that the verticle is running on event loop thread by default.
+..................................................................................
+			What if i write blocking code
+...................................................................................
+
+Blocking code:
+
+1.Thread.sleep
+2.Long running task
+3.legacy network api
+4.legacy file io code
+5.legacy database code access
+etc....
+
+Blocking code: using Thread.sleep
+
+package com.amex.threads;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+
+public class TimerBlockingVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    System.out.println("Start");
+    //pause the current thread
+    Thread.sleep(1000);
+    System.out.println("End");
+  }
+}
+package com.amex.threads;
+
+import io.vertx.core.Vertx;
+
+public class Deployer {
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    vertx.deployVerticle(new TimerBlockingVerticle());
+  }
+}
+Result:
+Start
+End
+
+Here you get Start first then after 1000ms you get end
+
+
+After Changing timer:
+
+package com.amex.threads;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+
+public class TimerBlockingVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    System.out.println("Start");
+    //pause the current thread
+    //Thread.sleep(1000);
+   // Thread.sleep(2000);
+    Thread.sleep(3000);
+    System.out.println("End");
+  }
+}
+
+Start
+Nov 11, 2024 4:34:29 PM io.vertx.core.impl.BlockedThreadChecker
+WARNING: Thread Thread[vert.x-eventloop-thread-0,5,main] has been blocked for 2763 ms, time limit is 2000 ms
+End
+
+Here , Vertx Event loop thread can be blocked for "2000ms", beyond that if you blocking vertx initally gives warning.
+
+I Increase More time:
+.....................
+package com.amex.threads;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+
+public class TimerBlockingVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    System.out.println("Start");
+    //pause the current thread
+    //Thread.sleep(1000);
+   // Thread.sleep(2000);
+    //Thread.sleep(3000);
+    Thread.sleep(10000);
+    System.out.println("End");
+  }
+}
+Nov 11, 2024 4:37:57 PM io.vertx.core.impl.BlockedThreadChecker
+WARNING: Thread Thread[vert.x-eventloop-thread-0,5,main] has been blocked for 2715 ms, time limit is 2000 ms
+Nov 11, 2024 4:37:58 PM io.vertx.core.impl.BlockedThreadChecker
+WARNING: Thread Thread[vert.x-eventloop-thread-0,5,main] has been blocked for 3716 ms, time limit is 2000 ms
+Nov 11, 2024 4:37:59 PM io.vertx.core.impl.BlockedThreadChecker
+WARNING: Thread Thread[vert.x-eventloop-thread-0,5,main] has been blocked for 4718 ms, time limit is 2000 ms
+Nov 11, 2024 4:38:00 PM io.vertx.core.impl.BlockedThreadChecker
+WARNING: Thread Thread[vert.x-eventloop-thread-0,5,main] has been blocked for 5720 ms, time limit is 2000 ms
+io.vertx.core.VertxException: Thread blocked
+
+Initally it gives warning , if the thread has been blocked for more times,then it throws exception called thread blocked exception.
+
+
+Gloden Rule:
+  Dont block event loop thread at any sceniero.
+
+       What if  i want to write blocking code inside non blocking context?
+
+There are two ways
+
+1.Via Verticle
+2.Via Vertx Method
+
+
+Types of Verticles:
+
+1.Standard Verticle
+   Verticles are normal, executed by event loop thread
+2.Worker Verticle
+   Verticles which are spcial ,executed by a separated thread of execution called
+ "Worker Pool Threads"
+
+Based on Verticles and Methods we can classifi threads as well.
+
+1.Event loop thread
+   Non blocking thread
+2.Worker Threads
+   Blocking threads, separate thread of execution
+
+
+Use case: How to write blocking code using verticle only- Worker Verticle.
+
+package com.amex.threads;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+
+public class WorkerVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    System.out.println(WorkerVerticle.class.getName() + " is running on " + Thread.currentThread().getName());
+    System.out.println("Start");
+    Thread.sleep(10000);
+    System.out.println("End");
+  }
+}
+package com.amex.threads;
+
+import io.vertx.core.DeploymentOptions;
+import io.vertx.core.ThreadingModel;
+import io.vertx.core.Vertx;
+
+public class Deployer {
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+//    DeploymentOptions options= new DeploymentOptions().setWorker(true);
+    DeploymentOptions options = new DeploymentOptions().setThreadingModel(ThreadingModel.WORKER);
+    vertx.deployVerticle(new WorkerVerticle(), options);
+  }
+}
+
+Result:
+com.amex.threads.WorkerVerticle is running on vert.x-worker-thread-0
+Start
+End
+
+Now whole verticle is running in blocking context
+....................................................................................
+ What if i have verticle which has many apis , in which some of the api only access  blocking code
+ 
+ Verticle is running non blocking but some apis i want to run in blocking context
+ 
+ lets say i have rest api which is non blocking, need to return result after delay using thread.sleep or rest api talks to external api...
+
+ How to write blocking code and non blocking in the same verticle?
+
+incase i have one method which access blocking api, others runs non blocking code.
+
+we have special method called
+
+ vertx.executeBlocking(blockingThread,grabresult);
+
+ first parameter is function which runs in worker pool thread
+ second parameter is function which runs in event loop thread
+
+ Vertx facilates thread communication by default
+
+package com.amex.threads;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+
+public class BlockingAndNonBlockingVerticle extends AbstractVerticle {
+
+  private void runBlocking() {
+    vertx.executeBlocking(blockingHandler -> {
+      //write any blocking
+      System.out.println("Blocking code runs in --->" + Thread.currentThread().getName());
+      try {
+        String result = "Hello,I am from Blocking";
+        Thread.sleep(10000);
+        blockingHandler.complete(result);
+      } catch (InterruptedException es) {
+        System.out.println(es.getCause().getMessage());
+      }
+    }, resultHandler -> {
+      System.out.println("Nonblocking code runs in --->" + Thread.currentThread().getName());
+      System.out.println(resultHandler.result().toString());
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    runBlocking();
+  }
+}
+
+Blocking and Rest api integration:
+..................................
+
+package com.amex.threads;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+import io.vertx.ext.web.Router;
+
+public class RestApiAndBlockingApi extends AbstractVerticle {
+
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    Router router = Router.router(vertx);
+    router.get("/api/block").blockingHandler(rc -> {
+      try {
+        String result = "Hello,I am from Blocking";
+        Thread.sleep(10000);
+        rc.response().setStatusCode(200).end(result);
+      } catch (InterruptedException es) {
+        System.out.println(es.getCause());
+      }
+    });
+
+    vertx.createHttpServer().requestHandler(router).listen(8080).onSuccess(server -> {
+      System.out.println("Server is Running at " + server.actualPort());
+    });
+  }
+}
+....................................................................................
+
+Use case: Read or write file using traditional java io apis which are blocking api
+Create filename.txt file in the project root dir
+
+package com.amex.blocking;
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+public class BlockingIODemo extends AbstractVerticle {
+  @Override
+  public void start() {
+    vertx.executeBlocking(promise -> {
+      // Blocking I/O operation
+      try {
+        String content = new String(Files.readAllBytes(Paths.get("filename.txt")));
+        promise.complete(content);
+      } catch (Exception e) {
+        promise.fail(e);
+      }
+    }, result -> {
+      if (result.succeeded()) {
+        System.out.println("File content: " + result.result());
+      } else {
+        System.out.println("Failed to read file: " + result.cause());
+      }
+    });
+  }
+
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    vertx.deployVerticle(new BlockingIODemo());
+  }
+}
+Intensive cpu compuation
+package com.amex.blocking;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+
+public class IntensiveComputationDemo extends AbstractVerticle {
+  @Override
+  public void start() {
+    vertx.executeBlocking(promise -> {
+      // Intensive computation
+      try {
+        double result = performIntensiveCalculation();
+        promise.complete(result);
+      } catch (Exception e) {
+        promise.fail(e);
+      }
+    }, result -> {
+      if (result.succeeded()) {
+        System.out.println("Computation result: " + result.result());
+      } else {
+        System.out.println("Failed to complete computation: " + result.cause());
+      }
+    });
+  }
+
+  private double performIntensiveCalculation() {
+    // Simulating intensive calculation
+    double sum = 0;
+    for (int i = 0; i < 1e7; i++) {
+      sum += Math.sqrt(i);
+    }
+    return sum;
+  }
+
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    vertx.deployVerticle(new IntensiveComputationDemo());
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
