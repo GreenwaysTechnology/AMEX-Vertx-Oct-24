@@ -1,0 +1,245 @@
+	   Scalability: How to run multiple instance of the same service
+              
+
+How to scale?
+
+How to load balance?
+
+How to make highly available?
+
+
+
+Scaling:
+package com.amex;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+
+public class MainVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    vertx.createHttpServer().requestHandler(req -> {
+      req.response()
+        .putHeader("content-type", "text/plain")
+        .end("Hello from Vert.x!"  + Thread.currentThread().getName() + " " + hashCode());
+    }).listen(8888).onComplete(http -> {
+      if (http.succeeded()) {
+        startPromise.complete();
+        System.out.println("HTTP server started on port 8888");
+      } else {
+        startPromise.fail(http.cause());
+      }
+    });
+  }
+}
+
+Deployer:
+package com.amex;
+
+import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Vertx;
+
+public class Deployer {
+  public static void main(String[] args) {
+    Vertx vertx = Vertx.vertx();
+    DeploymentOptions options = new DeploymentOptions().setInstances(3);
+    vertx.deployVerticle(new MainVerticle(),options).onSuccess(res->{
+      System.out.println("Deployed and its Id " + res);
+    }).onFailure(err->{
+      System.out.println(err.getMessage());
+    });
+  }
+}
+After Running,
+Exception in thread "main" java.lang.IllegalArgumentException: Can't specify > 1 instances for already created verticle
+	at io.vertx.core.impl.VertxImpl.deployVerticle(VertxImpl.java:817)
+	at com.amex.Deployer.main(Deployer.java:10)
+
+if you are going to deploy verticle with n-number of copies, you should not use "new Verticle()"
+
+Soultion:
+
+ vertx.deployVerticle(MainVerticle.class.getName(), options).onSuccess(res -> {
+      System.out.println("Deployed and its Id " + res);
+    }).onFailure(err -> {
+      System.out.println(err.getMessage());
+    });
+
+Result:
+HTTP server started on port 8888
+HTTP server started on port 8888
+HTTP server started on port 8888
+Deployed and its Id 9df4fc09-666a-4566-b328-1b56b0908110
+
+How to test?
+ open two browsers, and execute 
+
+http://localhost:8888/
+
+Hello from Vert.x!vert.x-eventloop-thread-3 1826600477
+
+
+http://localhost:8888
+
+Hello from Vert.x!vert.x-eventloop-thread-1 938628010
+
+Vertx automatically load balances the incoming request, redirect to available instances, in round robin fashion.
+.....................................................................................
+			Clustering
+....................................................................................
+How to scale and communicate across vertx engines?
+
+In cluster mode, if vertx engine(one server) down, the vertx engine(server) will take care.
+
+Distributed Vertx:
+
+
+As of now we have seen
+   -How to write verticles on single vertx engine
+   -how verticle communicates using event bus on vertx engine.
+
+Multi Node Architecture: Multi Vertx Engine Architecture
+.........................................................
+
+Vertx Types:
+
+1.Standard Vertx
+    -Single Node Vertx
+
+2.Clustered Vertx
+    -Multi Node Vertx
+
+Clustering:
+  grouping multiple different vertx engines under single communication system
+
+Cluster Manager and Providers:
+..............................
+
+Cluster Providers are third party servers, through which vertx can communicate
+
+
+Cluster Managers:
+1.HazelCast --default Cluster Manager, 
+2.Apache zookeeper
+3.Apache Ignite
+4.Apache Infinispan
+
+
+Publisher:
+package com.amex.cluster.provider;
+
+import io.vertx.core.*;
+import io.vertx.core.spi.cluster.ClusterManager;
+import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
+
+import java.lang.management.ManagementFactory;
+import java.lang.management.RuntimeMXBean;
+
+public class PublisherVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    ClusterManager clusterManager = new HazelcastClusterManager();
+
+    VertxOptions vertxOptions = new VertxOptions()
+      .setClusterManager(clusterManager)
+      .setHAEnabled(true)
+      .setHAGroup("g1");
+    //Create Clustered Vertx
+    Vertx.clusteredVertx(vertxOptions).onSuccess(vertxAsyncResult -> {
+      //deploy verticles
+      DeploymentOptions deploymentOptions = new DeploymentOptions().setInstances(3).setHa(true);
+      vertxAsyncResult.deployVerticle("com.amex.cluster.provider.PublisherVerticle", deploymentOptions)
+        .onSuccess(id -> {
+          System.out.println(id);
+        }).onFailure(err -> {
+          System.out.println(err);
+        });
+    }).onFailure(err -> {
+      System.out.println("Failed");
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    //send message via event bus to other verticles  which are running in cluster
+    RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
+    String jvmName = runtimeMXBean.getName();
+    long pid = Long.valueOf(jvmName.split("@")[0]);
+
+    vertx.setPeriodic(5000, ar -> {
+      System.out.println("PID = " + pid + "Thread = " + Thread.currentThread().getName());
+      vertx.eventBus().publish("news", Math.random() + " news ");
+    });
+  }
+}
+
+Consumer:
+package com.amex.cluster.consumer;
+
+import io.vertx.core.*;
+import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.MessageConsumer;
+import io.vertx.core.spi.cluster.ClusterManager;
+import io.vertx.spi.cluster.hazelcast.HazelcastClusterManager;
+
+import java.lang.management.ManagementFactory;
+import java.lang.management.RuntimeMXBean;
+
+public class ConsumerVerticle extends AbstractVerticle {
+  public static void main(String[] args) {
+    ClusterManager clusterManager = new HazelcastClusterManager();
+
+    VertxOptions vertxOptions = new VertxOptions()
+      .setClusterManager(clusterManager)
+      .setHAEnabled(true)
+      .setHAGroup("g1");
+    Vertx.clusteredVertx(vertxOptions).onSuccess(vertxAsyncResult -> {
+      //deploy verticles
+      DeploymentOptions deploymentOptions = new DeploymentOptions().setInstances(3).setHa(true);
+      vertxAsyncResult.deployVerticle("com.amex.cluster.consumer.ConsumerVerticle", deploymentOptions)
+        .onSuccess(id -> {
+          System.out.println(id);
+        }).onFailure(err -> {
+          System.out.println(err);
+        });
+    }).onFailure(err -> {
+      System.out.println("Failed");
+    });
+  }
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    EventBus eventBus = vertx.eventBus();
+    MessageConsumer<String> consumer = eventBus.consumer("news");
+    consumer.handler(news -> {
+      RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
+      String jvmName = runtimeMXBean.getName();
+      System.out.println("Node Name :" + jvmName);
+      long pid = Long.valueOf(jvmName.split("@")[0]);
+      System.out.println("PID = " + pid + "Thread = " + Thread.currentThread().getName());
+      System.out.println("Got News : " + news.body());
+    });
+  }
+}
+....................................................................................
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
