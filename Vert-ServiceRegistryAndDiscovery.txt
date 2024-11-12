@@ -1,0 +1,227 @@
+			 Vertx Service Discovery and Registry
+....................................................................................
+
+What is Service Registry?
+  This component provides an infrastructure to publish and discover various resources, such as service proxies, HTTP endpoints, data sources…
+These resources are called services. 
+
+A service is a discoverable functionality. It can be qualified by its type, metadata, and location. So a service can be a database, a service proxy, a HTTP endpoint and any other resource you can imagine as soon as you can describe it, discover it and interact with it. It does not have to be a vert.x entity, but can be anything. Each service is described by a Record
+
+What is Service?
+  Service can be any resource.
+  Service can be any Object
+
+What is Registry?
+  It is infrastructure to store services(resources/objects)
+  It is a database which is used to store services.
+
+What is discovery?
+  Finding resources/services from the registry.
+
+Why need Service Registry?
+ "Keepng Gloabal shared objects" across the distributed apps.
+
+
+Types of Services/Resources
+
+1.HTTP endPoint
+2.Event Bus Service
+3.Message Source
+4.Jdbc Data source
+5.Redis data source
+6.Mongodb data source
+
+1.A service provider can:
+
+1.1.publish a service record
+
+1.2.un-publish a published record
+
+1.3.update the status of a published service (down, out of service…​)
+
+2.A service consumer can:
+
+2.1.lookup services
+
+2.2.bind to a selected service (it gets a ServiceReference ) and use it
+
+3.release the service once the consumer is done with it
+
+4.listen for arrival, departure and modification of services
+
+
+Record:
+ Record is just like bag- inside that bag you can store any resource/store that record into service registry.
+
+
+Implementation:
+
+1.YOu need registry server - consul,zookeeper,kubernets,redis etc....
+2.you have to create Record object, pack your resources into record
+3.publish record into registry server
+
+Resource---->Record.
+
+Service Discovery Objects
+
+1.Record
+2.Service
+3.ServiceDiscovery
+
+Steps:
+
+1.create Record
+2.wrap the resource into Record
+3.Publish it
+4.Get the Record
+5.Get Reference from the Record
+6.Unpublish it if you dont need
+7.Use the Resource 
+
+Use case: How to store HTTPEND point into service Registry
+package com.amex.service.registry;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.ext.web.Route;
+import io.vertx.ext.web.Router;
+
+public class GreeterRestService extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    Router router = Router.router(vertx);
+    router.get("/api/hello").handler(rc->{
+       rc.response().end("Hello, Service Discovery")
+    });
+    vertx.createHttpServer().requestHandler(router).listen(8080).onSuccess(server->{
+      System.out.println("Greeter Server is Running at " + server.actualPort());
+    });
+
+  }
+}
+..................................................................................
+
+Publisher Verticle:
+  Can publish any service into registry server
+
+package com.amex.service.registry;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+import io.vertx.servicediscovery.Record;
+import io.vertx.servicediscovery.ServiceDiscovery;
+import io.vertx.servicediscovery.ServiceDiscoveryOptions;
+import io.vertx.servicediscovery.types.HttpEndpoint;
+
+public class ServicePublisherVerticle extends AbstractVerticle {
+
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    //Registry server configuration
+    ServiceDiscoveryOptions discoveryOptions = new ServiceDiscoveryOptions();
+    discoveryOptions.setBackendConfiguration(new
+      JsonObject()
+      .put("connection","127.0.0.1.2181")
+      .put("ephemeral",true)
+      .put("guaranteed",true)
+      .put("basePath","/services/my-backend")
+    );
+    //Create Service Registry Instance
+    ServiceDiscovery discovery = ServiceDiscovery.create(vertx,discoveryOptions);
+    //Create Record: HTTPENDPOINT- REST API INTO REGISTRY
+    Record httpEndpointRecord= HttpEndpoint.createRecord("greeterApiRecord","localhost",8080,"/api/hello");
+        //publish the record into service registry
+    discovery.publish(httpEndpointRecord).onSuccess(record->{
+      System.out.println("Sucessfully Published---->" + record.toJson());
+    }).onFailure(err->{
+      System.out.println("Publishing Error " + err.getMessage());
+    });
+
+  }
+}
+
+
+Consumer Verticle:
+package com.amex.service.registry;
+
+import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Promise;
+import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Router;
+import io.vertx.ext.web.client.WebClient;
+import io.vertx.servicediscovery.Record;
+import io.vertx.servicediscovery.ServiceDiscovery;
+import io.vertx.servicediscovery.ServiceDiscoveryOptions;
+import io.vertx.servicediscovery.types.HttpEndpoint;
+
+public class ConsumerVerticle extends AbstractVerticle {
+  @Override
+  public void start(Promise<Void> startPromise) throws Exception {
+    //Registry server configuration
+    ServiceDiscoveryOptions discoveryOptions = new ServiceDiscoveryOptions();
+    discoveryOptions.setBackendConfiguration(new
+      JsonObject()
+      .put("connection", "127.0.0.1.2181")
+      .put("ephemeral", true)
+      .put("guaranteed", true)
+      .put("basePath", "/services/my-backend")
+    );
+    //Create Service Registry Instance
+    ServiceDiscovery discovery = ServiceDiscovery.create(vertx, discoveryOptions);
+
+    Router router = Router.router(vertx);
+
+    router.get("/api/greet").handler(rc -> {
+      //communicate Service Registry and get HttpEndpoint Record
+      HttpEndpoint.getWebClient(discovery, new JsonObject().put("name", "greeterApiRecord"))
+        .onSuccess(webClient -> {
+          webClient.get("/api/hello").send().onSuccess(response -> {
+            rc.response().end(response.bodyAsString());
+          });
+          //Relsease HttpEndPoint resource from the Registory
+          rc.response().endHandler(ar1->{
+             //remove /realse service Discovery Record
+              ServiceDiscovery.releaseServiceObject(discovery,webClient);
+          });
+        })
+        .onFailure(err -> {
+          System.out.println(err.getMessage());
+        });
+    });
+
+
+    vertx.createHttpServer().requestHandler(router).listen(8081).onSuccess(server -> {
+      System.out.println("Consumer Server is Running  " + server.actualPort());
+
+    }).onFailure(err -> {
+      System.out.println("Consumer server has failed " + err.getMessage());
+    });
+
+  }
+}
+
+
+Deployer Verticle:
+.................
+package com.amex.service.registry;
+
+import io.vertx.core.Vertx;
+
+public class Deployer {
+  public static void main(String[] args) {
+    Vertx vertx  =Vertx.vertx();
+    vertx.deployVerticle(new GreeterRestService());
+    vertx.deployVerticle(new ServicePublisherVerticle());
+    vertx.deployVerticle(new ConsumerVerticle());
+  }
+}
+
+Here we use , built in, in memory service registry, if you want to use other service registries.
+
+Steps:
+1.you can start respective registry servers
+2.you have to add bridge dependency
+3.you have to configure registry server.
+
+
